@@ -229,6 +229,10 @@ document.body.addEventListener('click', (e) => {
     hideNewMessage(true);
     return;
   }
+  if (button && button.name === 'republish') {
+    republish(id);
+    return;
+  }
   const username = e.target.closest('.mbox-username')
   if (username) {
     history.pushState({author: pubkey}, '', `/${pubkey}`);
@@ -254,6 +258,18 @@ document.body.addEventListener('click', (e) => {
   //   return;
   // }
 });
+
+function republish(id) {
+  const note = textNoteList.find(note => note.id === id) || replyList.find(note => note.id === id);
+  pool.publish(note, (status, url) => {
+    if (status === 0) {
+      console.info(`publish request sent to ${url}`);
+    }
+    if (status === 1) {
+      console.info(`event published by ${url}`);
+    }
+  }).catch(console.error);
+}
 
 const textNoteList = []; // could use indexDB
 const eventRelayMap = {}; // eventId: [relay1, relay2]
@@ -455,6 +471,9 @@ function createTextNote(evt, relay) {
         }),
         elem('small', {data: {reactions: ''}}, hasReactions ? reactionMap[evt.id].length : ''),
       ]),
+      // elem('button', {className: 'btn-inline', name: 'republish'}, [
+      //   elem('small', {}, 'republish')
+      // ]),
     ]),
     // replies[0] ? elem('div', {className: 'mobx-replies'}, replyFeed.reverse()) : '',
   ]);
