@@ -29,7 +29,7 @@
 }
 
 #errorOverlay .buttons {
-  max-width: var(--max-width);
+  max-width: var(--content-width);
 }
 @media (orientation: portrait) {
   #errorOverlay .buttons {

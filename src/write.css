@@ -1,20 +1,29 @@
 #bubble {
-  bottom: 4rem;
+  background-color: darkmagenta;
+  border-color: darkmagenta;
+  border-radius: 10rem;
+  bottom: 8rem;
   height: 10rem;
   padding: 0;
   position: fixed;
-  right: 5rem;
+  right: 8rem;
   width: 10rem;
-  z-index: 12;
+  z-index: 1;
 }
 @media (orientation: portrait) {
   #bubble {
-    bottom: calc(2 * var(--gap));
+    bottom: calc(4 * var(--gap));
     right: var(--gap);
   }
 }
+#bubble svg {
+  height: 100%;
+  position: relative;
+  width: 100%;
+  top: .5rem;
+}
 
-#newMessage {
+#newNote {
   align-items: center;
   display: flex;
   height: 100vh;
@@ -25,12 +34,12 @@
   z-index: 20;
 }
 @media (orientation: portrait) {
-  #newMessage {
+  #newNote {
     align-items: start;
   }
 }
 
-#newMessage #writeForm {
+#newNote #writeForm {
   align-items: start;
   background-color: var(--bgcolor);
   display: flex;
@@ -46,11 +55,11 @@
   padding: 2rem;
 }
 
-#newMessage .form-inline textarea {
+#newNote .form-inline textarea {
   flex-basis: 100%;
   margin: var(--gap) 0;
 }
 
-#newMessage .buttons {
+#newNote .buttons {
   align-self: end;
 }

@@ -6,14 +6,11 @@
   align-items: center;
   display: flex;
   flex-direction: row;
+  flex-shrink: 0;
   flex-wrap: wrap;
   margin-bottom: 1rem;
-  padding: 0 var(--gap);
-}
-@media (orientation: portrait) {
-  .mbox {
-    padding: 0 var(--gap-half);
-  }
+  max-width: var(--content-width);
+  padding: 0 var(--gap-half);
 }
 .mbox:last-child {
   margin-bottom: 0;
@@ -28,10 +25,10 @@
   border-radius: var(--profileimg-size);
   flex-basis: var(--profileimg-size);
   height: var(--profileimg-size);
-  margin-right: 1.5rem;
+  margin-right: var(--gap-half);
   max-height: var(--profileimg-size);
   max-width: var(--profileimg-size);
-  overflow: hidden;
+  overflow: clip;
   position: relative;
   z-index: 2;
 }
@@ -53,14 +50,17 @@
   word-break: break-word;
 }
 .mbox-img + .mbox-body {
-  flex-basis: calc(100% - 64px - 1rem);
+  flex-basis: calc(100% - var(--profileimg-size) - var(--gap-half));
 }
 
 .mbox-header {
-  flex-basis: calc(100% - 64px - 1rem);
+  flex-basis: calc(100% - var(--profileimg-size) - var(--gap-half));
   flex-grow: 0;
   flex-shrink: 1;
   margin-top: 0;
+}
+.mbox-header a {
+  font-size: var(--font-small);
 }
 .mbox-header time,
 .mbox-username {
@@ -90,7 +90,7 @@
 }
 
 .mbox {
-  overflow: hidden;
+  overflow: clip;
 }
 .mbox .mbox {
   overflow: visible;

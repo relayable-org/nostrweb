@@ -52,39 +52,6 @@ const unSubAll = () => {
   subList.length = 0;
 };
 
-window.addEventListener('popstate', (event) => {
-  // console.log(`popstate path: ${location.pathname}, state: ${JSON.stringify(event.state)}`);
-  unSubAll();
-  if (event.state?.author) {
-    subProfile(event.state.author);
-    return;
-  }
-  if (event.state?.pubOrEvt) {
-    subNoteAndProfile(event.state.pubOrEvt);
-    return;
-  }
-  if (event.state?.eventId) {
-    subTextNote(event.state.eventId);
-    return;
-  }
-  sub24hFeed();
-  showFeed();
-});
-
-switch(location.pathname) {
-  case '/':
-    history.pushState({}, '', '/');
-    sub24hFeed();
-    break;
-  default:
-    const pubOrEvt = location.pathname.slice(1);
-    if (pubOrEvt.length === 64 && pubOrEvt.match(/^[0-9a-f]+$/)) {
-      history.pushState({pubOrEvt}, '', `/${pubOrEvt}`);
-      subNoteAndProfile(pubOrEvt);
-    }
-    break;
-}
-
 function sub24hFeed() {
   subList.push(pool.sub({
     cb: onEvent,
@@ -92,22 +59,20 @@ function sub24hFeed() {
       kinds: [0, 1, 2, 7],
       // until: Math.floor(Date.now() * 0.001),
       since: Math.floor((Date.now() * 0.001) - (24 * 60 * 60)),
-      limit: 450,
+      limit: 50,
     }
   }));
 }
 
 function subNoteAndProfile(id) {
-  subProfile(id);
+  // view(`/${id}`); // assume text note
   subTextNote(id);
+  subProfile(id);
 }
 
 function subTextNote(eventId) {
   subList.push(pool.sub({
-    cb: (evt, relay) => {
-      clearTextNoteDetail();
-      showTextNoteDetail(evt, relay);
-    },
+    cb: onEvent,
     filter: {
       ids: [eventId],
       kinds: [1],
@@ -119,8 +84,9 @@ function subTextNote(eventId) {
 function subProfile(pubkey) {
   subList.push(pool.sub({
     cb: (evt, relay) => {
-      renderProfile(evt, relay);
-      showProfileDetail();
+      console.log('found profile, unsub subTextNote somehow')
+      // renderProfile(evt, relay);
+      // view('/[profile]');
     },
     filter: {
       authors: [pubkey],
@@ -130,136 +96,57 @@ function subProfile(pubkey) {
   }));
   // get notes for profile
   subList.push(pool.sub({
-    cb: (evt, relay) => {
-      showTextNoteDetail(evt, relay);
-      showProfileDetail();
-    },
+    cb: onEvent,
     filter: {
       authors: [pubkey],
       kinds: [1],
-      limit: 450,
+      limit: 50,
     }
   }));
 }
 
-const detailContainer = document.querySelector('#detail');
-const profileContainer = document.querySelector('#profile');
-const profileAbout = profileContainer.querySelector('.profile-about');
-const profileName = profileContainer.querySelector('.profile-name');
-const profilePubkey = profileContainer.querySelector('.profile-pubkey');
-const profilePubkeyLabel = profileContainer.querySelector('.profile-pubkey-label');
-const profileImage = profileContainer.querySelector('.profile-image');
-const textNoteContainer = document.querySelector('#textnote');
-
-function clearProfile() {
-  profileAbout.textContent = '';
-  profileName.textContent = '';
-  profilePubkey.textContent = '';
-  profilePubkeyLabel.hidden = true;
-  profileImage.removeAttribute('src');
-  profileImage.hidden = true;
-}
-function renderProfile(evt, relay) {
-  profileContainer.dataset.pubkey = evt.pubkey;
-  profilePubkey.textContent = evt.pubkey;
-  profilePubkeyLabel.hidden = false;
-  const content = parseContent(evt.content);
-  if (content) {
-    profileAbout.textContent = content.about;
-    profileName.textContent = content.name;
-    const noxyImg = validatePow(evt) && getNoxyUrl('data', content.picture, evt.id, relay);
-    if (noxyImg) {
-      profileImage.setAttribute('src', noxyImg);
-      profileImage.hidden = false;
-    }
-  }
-}
-
-function showProfileDetail() {
-  profileContainer.hidden = false;
-  textNoteContainer.hidden = false;
-  showDetail();
-}
-
-function clearTextNoteDetail() {
-  textNoteContainer.replaceChildren([]);
-}
-
-function showTextNoteDetail(evt, relay) {
-  if (!textNoteContainer.querySelector(`[data-id="${evt.id}"]`)) {
-    textNoteContainer.append(createTextNote(evt, relay));
-  }
-  textNoteContainer.hidden = false;
-  profileContainer.hidden = true;
-  showDetail();
-}
-
-function showDetail() {
-  feedContainer.hidden = true;
-  detailContainer.hidden = false;
-}
-
-function showFeed() {
-  feedContainer.hidden = false;
-  detailContainer.hidden = true;
-}
-
-document.querySelector('label[for="feed"]').addEventListener('click', () => {
-  if (location.pathname !== '/') {
-    showFeed();
-    history.pushState({}, '', '/');
-    unSubAll();
-    sub24hFeed();
-  }
-});
-
-document.body.addEventListener('click', (e) => {
-  const button = e.target.closest('button');
-  const pubkey = e.target.closest('[data-pubkey]')?.dataset.pubkey;
-  const id = e.target.closest('[data-id]')?.dataset.id;
-  const relay = e.target.closest('[data-relay]')?.dataset.relay;
-  if (button && button.name === 'reply') {
-    if (localStorage.getItem('reply_to') === id) {
-      writeInput.blur();
-      return;
-    }
-    appendReplyForm(button.closest('.buttons'));
-    localStorage.setItem('reply_to', id);
-    return;
-  }
-  if (button && button.name === 'star') {
-    upvote(id, pubkey);
-    return;
-  }
-  if (button && button.name === 'back') {
-    hideNewMessage(true);
-    return;
-  }
-  const username = e.target.closest('.mbox-username')
-  if (username) {
-    history.pushState({author: pubkey}, '', `/${pubkey}`);
-    unSubAll();
-    clearProfile();
-    clearTextNoteDetail();
-    subProfile(pubkey);
-    showProfileDetail();
-    return;
-  }
-  const eventTime = e.target.closest('.mbox-header time');
-  if (eventTime) {
-    history.pushState({eventId: id, relay}, '', `/${id}`);
-    unSubAll();
-    clearTextNoteDetail();
-    subTextNote(id);
-    return;
-  }
-  // const container = e.target.closest('[data-append]');
-  // if (container) {
-  //   container.append(...parseTextContent(container.dataset.append));
-  //   delete container.dataset.append;
-  //   return;
+const containers = [
+  // {
+  //   id: '/00527c2b28ea78446c148cb40cc6e442ea3d0945ff5a8b71076483398525b54d',
+  //   view: Node,
+  //   content: Node,
+  //   dom: {}
   // }
-});
+];
+let activeContainerIndex = null;
+
+// const profileContainer = document.querySelector('#profile');
+// const profileAbout = profileContainer.querySelector('.profile-about');
+// const profileName = profileContainer.querySelector('.profile-name');
+// const profilePubkey = profileContainer.querySelector('.profile-pubkey');
+// const profilePubkeyLabel = profileContainer.querySelector('.profile-pubkey-label');
+// const profileImage = profileContainer.querySelector('.profile-image');
+// const textNoteContainer = document.querySelector('#textnote');
+
+// function clearProfile() {
+//   profileAbout.textContent = '';
+//   profileName.textContent = '';
+//   profilePubkey.textContent = '';
+//   profilePubkeyLabel.hidden = true;
+//   profileImage.removeAttribute('src');
+//   profileImage.hidden = true;
+// }
+// function renderProfile(evt, relay) {
+//   profileContainer.dataset.pubkey = evt.pubkey;
+//   profilePubkey.textContent = evt.pubkey;
+//   profilePubkeyLabel.hidden = false;
+//   const content = parseContent(evt.content);
+//   if (content) {
+//     profileAbout.textContent = content.about;
+//     profileName.textContent = content.name;
+//     const noxyImg = validatePow(evt) && getNoxyUrl('data', content.picture, evt.id, relay);
+//     if (noxyImg) {
+//       profileImage.setAttribute('src', noxyImg);
+//       profileImage.hidden = false;
+//     }
+//   }
+// }
+
 
 const textNoteList = []; // could use indexDB
 const eventRelayMap = {}; // eventId: [relay1, relay2]
@@ -267,33 +154,33 @@ const eventRelayMap = {}; // eventId: [relay1, relay2]
 const hasEventTag = tag => tag[0] === 'e';
 const isReply = ([tag, , , marker]) => tag === 'e' && marker !== 'mention';
 const isMention = ([tag, , , marker]) => tag === 'e' && marker === 'mention';
+const hasEnoughPOW = ([tag, , commitment]) => {
+  return tag === 'nonce' && commitment >= fitlerDifficulty && zeroLeadingBitsCount(note.id) >= fitlerDifficulty;
+};
+const renderNote = (evt, i, sortedFeeds) => {
+  if (getViewElem(evt.id)) { // note already in view
+    return;
+  }
+  const article = createTextNote(evt, eventRelayMap[evt.id]);
+  if (i === 0) {
+    getViewContent().append(article);
+  } else {
+    getViewElem(sortedFeeds[i - 1].id).before(article);
+  }
+  setViewElem(evt.id, article);
+};
 
 const renderFeed = bounce(() => {
   const now = Math.floor(Date.now() * 0.001);
-  const sortedFeeds = textNoteList
+  textNoteList
     // dont render notes from the future
     .filter(note => note.created_at <= now)
     // if difficulty filter is configured dont render notes with too little pow
-    .filter(note => {
-      return !fitlerDifficulty || note.tags.some(([tag, , commitment]) => {
-        return tag === 'nonce' && commitment >= fitlerDifficulty && zeroLeadingBitsCount(note.id) >= fitlerDifficulty;
-      });
-    })
-    .sort(sortByCreatedAt).reverse();
-  sortedFeeds.forEach((evt, i) => {
-    if (feedDomMap[evt.id]) {
-      // TODO check eventRelayMap if event was published to different relays
-      return;
-    }
-    const article = createTextNote(evt, eventRelayMap[evt.id]);
-    if (i === 0) {
-      feedContainer.append(article);
-    } else {
-      feedDomMap[sortedFeeds[i - 1].id].before(article);
-    }
-    feedDomMap[evt.id] = article;
-  });
-}, 17); // (16.666 rounded, a bit arbitrary but that it doesnt update more than 60x per s)
+    .filter(note => !fitlerDifficulty || note.tags.some(hasEnoughPOW))
+    .sort(sortByCreatedAt)
+    .reverse()
+    .forEach(renderNote);
+}, 17); // (16.666 rounded, an arbitrary value to limit updates to max 60x per s)
 
 function handleTextNote(evt, relay) {
   if (eventRelayMap[evt.id]) {
@@ -305,29 +192,40 @@ function handleTextNote(evt, relay) {
     } else {
       textNoteList.push(evt);
     }
+  }
+  if (!getViewElem(evt.id)) {
     renderFeed();
   }
 }
 
 const replyList = [];
-const replyDomMap = {};
-const replyToMap = {};
 
 function handleReply(evt, relay) {
   if (
-    replyDomMap[evt.id] // already rendered probably received from another relay
+    getViewElem(evt.id) // already rendered probably received from another relay
     || evt.tags.some(isMention) // ignore mentions for now
   ) {
     return;
   }
-  if (!replyToMap[evt.id]) {
-    replyToMap[evt.id] = getReplyTo(evt);
+  const replyTo = getReplyTo(evt);
+  const evtWithReplyTo = {replyTo, ...evt};
+  replyList.push(evtWithReplyTo);
+  renderReply(evtWithReplyTo, relay);
+}
+
+function renderReply(evt, relay) {
+  const parent = getViewElem(evt.replyTo);
+  if (!parent) { // root article has not been rendered
+    return;
   }
-  replyList.push({
-    replyTo: replyToMap[evt.id],
-    ...evt,
-  });
-  renderReply(evt, relay);
+  let replyContainer = parent.querySelector('.mobx-replies');
+  if (!replyContainer) {
+    replyContainer = elem('div', {className: 'mobx-replies'});
+    parent.append(replyContainer);
+  }
+  const reply = createTextNote(evt, relay);
+  replyContainer.append(reply);
+  setViewElem(evt.id, reply);
 }
 
 const reactionMap = {};
@@ -353,22 +251,19 @@ function handleReaction(evt, relay) {
   } else {
     reactionMap[eventId] = [evt];
   }
-  const article = feedDomMap[eventId] || replyDomMap[eventId];
+  const article = getViewElem(eventId);
   if (article) {
     const button = article.querySelector('button[name="star"]');
     const reactions = button.querySelector('[data-reactions]');
     reactions.textContent = reactionMap[eventId].length;
     if (evt.pubkey === pubkey) {
       const star = button.querySelector('img[src*="star"]');
-      star?.setAttribute('src', 'assets/star-fill.svg');
+      star?.setAttribute('src', '/assets/star-fill.svg');
       star?.setAttribute('title', getReactionList(eventId).join(' '));
     }
   }
 }
 
-// feed
-const feedContainer = document.querySelector('#homefeed');
-const feedDomMap = {};
 const restoredReplyTo = localStorage.getItem('reply_to');
 
 const sortByCreatedAt = (evt1, evt2) => {
@@ -379,9 +274,9 @@ const sortByCreatedAt = (evt1, evt2) => {
 };
 
 function rerenderFeed() {
-  Object.keys(feedDomMap).forEach(key => delete feedDomMap[key]);
-  Object.keys(replyDomMap).forEach(key => delete replyDomMap[key]);
-  feedContainer.replaceChildren([]);
+  const domMap = getViewDom(); // TODO: this is only the current view, do this for all views
+  Object.keys(domMap).forEach(key => delete domMap[key]);
+  getViewContent().replaceChildren([]);
   renderFeed();
 }
 
@@ -468,7 +363,7 @@ function createTextNote(evt, relay) {
   // const content = isLongContent ? evt.content.slice(0, 280) : evt.content;
   const hasReactions = reactionMap[evt.id]?.length > 0;
   const didReact = hasReactions && !!reactionMap[evt.id].find(reaction => reaction.pubkey === pubkey);
-  const replyFeed = replies[0] ? replies.sort(sortByCreatedAt).map(e => replyDomMap[e.id] = createTextNote(e, relay)) : [];
+  const replyFeed = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
   const [content, {firstLink}] = parseTextContent(evt.content);
   const body = elem('div', {className: 'mbox-body'}, [
     elem('header', {
@@ -477,11 +372,9 @@ function createTextNote(evt, relay) {
       ${evt.tags.length ? `\nTags ${JSON.stringify(evt.tags)}\n` : ''}
       ${evt.content}`
     }, [
-      elem('small', {}, [
-        elem('strong', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`}, name || userName),
-        ' ',
-        elem('time', {dateTime: time.toISOString()}, formatTime(time)),
-      ]),
+      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.pubkey}`, data: {nav: '/[profile]'}}, name || userName),
+      ' ',
+      elem('a', {href: `/${evt.id}`, data: {nav: '/[note]'}}, formatTime(time)),
     ]),
     elem('div', {/* data: isLongContent ? {append: evt.content.slice(280)} : null*/}, [
       ...content,
@@ -489,13 +382,13 @@ function createTextNote(evt, relay) {
     ]),
     elem('div', {className: 'buttons'}, [
       elem('button', {name: 'reply', type: 'button'}, [
-        elem('img', {height: 24, width: 24, src: 'assets/comment.svg'})
+        elem('img', {height: 24, width: 24, src: '/assets/comment.svg'})
       ]),
       elem('button', {name: 'star', type: 'button'}, [
         elem('img', {
           alt: didReact ? '✭' : '✩', // ♥
           height: 24, width: 24,
-          src: `assets/${didReact ? 'star-fill' : 'star'}.svg`,
+          src: `/assets/${didReact ? 'star-fill' : 'star'}.svg`,
           title: getReactionList(evt.id).join(' '),
         }),
         elem('small', {data: {reactions: ''}}, hasReactions ? reactionMap[evt.id].length : ''),
@@ -510,22 +403,6 @@ function createTextNote(evt, relay) {
     elem('div', {className: 'mbox-img'}, [img]), body,
     replies[0] ? elem('div', {className: 'mobx-replies'}, replyFeed.reverse()) : '',
   ], {data: {id: evt.id, pubkey: evt.pubkey, relay}});
-}
-
-function renderReply(evt, relay) {
-  const replyToId = replyToMap[evt.id];
-  const article = feedDomMap[replyToId] || replyDomMap[replyToId];
-  if (!article) { // root article has not been rendered
-    return;
-  }
-  let replyContainer = article.querySelector('.mobx-replies');
-  if (!replyContainer) {
-    replyContainer = elem('div', {className: 'mobx-replies'});
-    article.append(replyContainer);
-  }
-  const reply = createTextNote(evt, relay);
-  replyContainer.append(reply);
-  replyDomMap[evt.id] = reply;
 }
 
 const sortEventCreatedAt = (created_at) => (
@@ -544,33 +421,33 @@ function isWssUrl(string) {
 }
 
 function handleRecommendServer(evt, relay) {
-  if (feedDomMap[evt.id] || !isWssUrl(evt.content)) {
+  if (getViewElem(evt.id) || !isWssUrl(evt.content)) {
     return;
   }
   const art = renderRecommendServer(evt, relay);
   if (textNoteList.length < 2) {
-    feedContainer.append(art);
+    getViewContent().append(art);
   } else {
     const closestTextNotes = textNoteList
       .filter(note => !fitlerDifficulty || note.tags.some(([tag, , commitment]) => tag === 'nonce' && commitment >= fitlerDifficulty))
       .sort(sortEventCreatedAt(evt.created_at));
-    feedDomMap[closestTextNotes[0].id]?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
+      getViewElem(closestTextNotes[0].id)?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
   }
-  feedDomMap[evt.id] = art;
+  setViewElem(evt.id, art);
 }
 
 function handleContactList(evt, relay) {
-  if (feedDomMap[evt.id]) {
+  if (getViewElem(evt.id)) {
     return;
   }
   const art = renderUpdateContact(evt, relay);
   if (textNoteList.length < 2) {
-    feedContainer.append(art);
+    getViewContent().append(art);
     return;
   }
   const closestTextNotes = textNoteList.sort(sortEventCreatedAt(evt.created_at));
-  feedDomMap[closestTextNotes[0].id].after(art);
-  feedDomMap[evt.id] = art;
+  getViewElem(closestTextNotes[0].id).after(art);
+  setViewElem(evt.id, art);
   // const user = userList.find(u => u.pupkey === evt.pubkey);
   // if (user) {
   //   console.log(`TODO: add contact list for ${evt.pubkey.slice(0, 8)} on ${relay}`, evt.tags);
@@ -585,9 +462,7 @@ function renderUpdateContact(evt, relay) {
   const {img, time, userName} = getMetadata(evt, relay);
   const body = elem('div', {className: 'mbox-body', title: dateTime.format(time)}, [
     elem('header', {className: 'mbox-header'}, [
-      elem('small', {}, [
-        
-      ]),
+      elem('small', {}, []),
     ]),
     elem('pre', {title: JSON.stringify(evt.content)}, [
       elem('strong', {}, userName),
@@ -725,9 +600,8 @@ function getMetadata(evt, relay) {
     src: userImg,
     title: `${userName} on ${host} ${userAbout}`,
   }) : elemCanvas(evt.pubkey);
-  const isReply = !!replyToMap[evt.id];
   const time = new Date(evt.created_at * 1000);
-  return {host, img, isReply, name, time, userName};
+  return {host, img, name, time, userName};
 }
 
 /**
@@ -790,30 +664,6 @@ function appendReplyForm(el) {
 const lockScroll = () => document.body.style.overflow = 'hidden';
 const unlockScroll = () => document.body.style.removeProperty('overflow');
 
-const newMessageDiv = document.querySelector('#newMessage');
-document.querySelector('#bubble').addEventListener('click', (e) => {
-  localStorage.removeItem('reply_to'); // should it forget old replyto context?
-  newMessageDiv.prepend(writeForm);
-  hideNewMessage(false);
-  writeInput.focus();
-  if (writeInput.value.trimRight()) {
-    writeInput.style.removeProperty('height');
-  }
-  lockScroll();
-  requestAnimationFrame(() => updateElemHeight(writeInput));
-});
-
-document.body.addEventListener('keyup', (e) => {
-  if (e.key === 'Escape') {
-    hideNewMessage(true);
-  }
-});
-
-function hideNewMessage(hide) {
-  unlockScroll();
-  newMessageDiv.hidden = hide;
-}
-
 let fitlerDifficulty = JSON.parse(localStorage.getItem('filter_difficulty')) ?? 0;
 const filterDifficultyInput = document.querySelector('#filterDifficulty');
 const filterDifficultyDisplay = document.querySelector('[data-display="filter_difficulty"]');
@@ -851,7 +701,7 @@ async function upvote(eventId, eventPubkey) {
       .map(([a, b]) => [a, b]), // drop optional (nip-10) relay and marker fields
     ['e', eventId], ['p', eventPubkey], // last e and p tag is the id and pubkey of the note being reacted to (nip-25)
   ];
-  const article = (feedDomMap[eventId] || replyDomMap[eventId]);
+  const article = getViewElem(eventId);
   const reactionBtn = article.querySelector('[name="star"]');
   const statusElem = article.querySelector('[data-reactions]');
   reactionBtn.disabled = true;
@@ -906,11 +756,11 @@ writeForm.addEventListener('submit', async (e) => {
     publish.disabled = true;
     if (replyTo) {
       localStorage.removeItem('reply_to');
-      newMessageDiv.append(writeForm);
+      publishView.append(writeForm);
     }
-    hideNewMessage(true);
+    publishView.hidden = true;
   };
-  const tags = replyTo ? [['e', replyTo, eventRelayMap[replyTo][0]]] : [];
+  const tags = replyTo ? [['e', replyTo]] : []; // , eventRelayMap[replyTo][0]
   const newEvent = await powEvent({
     kind: 1,
     content,
@@ -953,6 +803,239 @@ function updateElemHeight(el) {
     el.style.removeProperty('padding-top');
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+function getViewContent() {
+  return containers[activeContainerIndex]?.content;
+}
+
+function getViewDom() {
+  return containers[activeContainerIndex]?.dom;
+}
+
+function getViewElem(key) {
+  return containers[activeContainerIndex]?.dom[key];
+}
+
+function setViewElem(key, node) {
+  const container = containers[activeContainerIndex];
+  if (container) {
+    container.dom[key] = node;
+  }
+  return node;
+}
+
+const mainContainer = document.querySelector('main');
+
+const getContainer = (containers, route) => {
+  let container = containers.find(c => c.route === route);
+  if (container) {
+    return container;
+  }
+  const content = elem('div', {className: 'content'});
+  const view = elem('section', {className: 'view'}, [content]);
+  mainContainer.append(view);
+  container = {route, view, content, dom: {}};
+  containers.push(container);
+  return container;
+};
+
+document.body.onload = () => console.log('------------ pageload ------------')
+
+function view(route) {
+  const active = containers[activeContainerIndex];
+  active?.view.classList.remove('view-active');
+  const nextContainer = getContainer(containers, route);
+  const nextContainerIndex = containers.indexOf(nextContainer);
+  if (nextContainerIndex === activeContainerIndex) {
+    return;
+  }
+  if (active) {
+    nextContainer.view.classList.add('view-next');
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      nextContainer.view.classList.remove('view-next', 'view-prev');
+      nextContainer.view.classList.add('view-active');
+    });
+    // // console.log(activeContainerIndex, nextContainerIndex);
+    getViewContent()?.querySelectorAll('.view-prev').forEach(prev => {
+      prev.classList.remove('view-prev');
+      prev.classList.add('view-next');
+    });
+    active?.view.classList.add(nextContainerIndex < activeContainerIndex ? 'view-next' : 'view-prev');
+    activeContainerIndex = nextContainerIndex;
+  });
+}
+
+function navigate(route) {
+  if (typeof route === 'string') {
+    view(route);
+    history.pushState({}, '', route);
+    return;
+  }
+  if (route.pubkey) {
+    view(`/${route.pubkey}`);
+    history.pushState(route, '', `/${route.pubkey}`);
+    return;
+  }
+  if (route.note) {
+    view(`/${route.note}`);
+    history.pushState(route, '', `/${route.note}`);
+    return;
+  }
+  if (route.pubOrNote) {
+    view(`/${route.pubOrNote}`);
+    history.pushState(route, '', `/${route.pubOrNote}`);
+    return;
+  }
+  console.warn('unhandeleded', route);
+}
+
+// onload
+switch(location.pathname) {
+  case '/':
+    sub24hFeed();
+    navigate('/');
+    break;
+  default:
+    const pubOrNote = location.pathname.slice(1);
+    if (pubOrNote.length === 64 && pubOrNote.match(/^[0-9a-f]+$/)) {
+      navigate({pubOrNote});
+      subNoteAndProfile(pubOrNote);
+    }
+    break;
+}
+
+window.addEventListener('popstate', (event) => {
+  // console.log(`popstate: ${location.pathname}, state: ${JSON.stringify(event.state)}`);
+  unSubAll();
+  if (event.state?.pubkey) {
+    subProfile(event.state.pubkey);
+    view(`/${event.state.pubkey}`);
+    return;
+  }
+  if (event.state?.pubOrNote) {
+    subNoteAndProfile(event.state.pubOrNote);
+    view(`/${event.state.pubOrNote}`); // assuming note
+    return;
+  }
+  if (event.state?.note) {
+    subTextNote(event.state.note);
+    view(`/${event.state.note}`); // assuming note
+    return;
+  }
+  if (location.pathname === '/') {
+    sub24hFeed();
+    view('/');
+    return;
+  }
+});
+
+const settingsView = document.querySelector('#settings');
+const publishView = document.querySelector('#newNote');
+
+document.body.addEventListener('click', (e) => {
+  const a = e.target.closest('a');
+  const pubkey = e.target.closest('[data-pubkey]')?.dataset.pubkey;
+  const id = e.target.closest('[data-id]')?.dataset.id;
+  if (a) {
+    if ('nav' in a.dataset) {
+      e.preventDefault();
+      if (!settingsView.hidden) {
+        settingsView.hidden = true;
+      }
+      if (!publishView.hidden) {
+        publishView.hidden = true;
+      }
+      const href = a.getAttribute('href');
+      switch(href) {
+        case '/':
+          navigate('/');
+          unSubAll();
+          sub24hFeed();
+          break;
+        default:
+          switch(a.dataset.nav) {
+            case '/[profile]':
+              unSubAll();
+              subProfile(pubkey);
+              navigate({pubkey});
+              break;
+            case '/[note]':
+              unSubAll();
+              subTextNote(id)
+              navigate({note: id});
+              break;
+            default:
+              console.warn('what route is that', href);
+          }
+          break;
+      }
+      e.preventDefault();
+    }
+    return;
+  }
+  const button = e.target.closest('button');
+  if (button) {
+    switch(button.name) {
+      case 'reply':
+        if (localStorage.getItem('reply_to') === id) {
+          writeInput.blur();
+          return;
+        }
+        appendReplyForm(button.closest('.buttons'));
+        localStorage.setItem('reply_to', id);
+        break;
+      case 'star':
+        upvote(id, pubkey);
+        break;
+      case 'settings':
+        settingsView.hidden = !settingsView.hidden;
+        break;
+      case 'new-note':
+        if (publishView.hidden) {
+          localStorage.removeItem('reply_to'); // should it forget old replyto context?
+          publishView.append(writeForm);
+          if (writeInput.value.trimRight()) {
+            writeInput.style.removeProperty('height');
+          }
+          requestAnimationFrame(() => {
+            updateElemHeight(writeInput);
+            writeInput.focus();
+          });
+          publishView.removeAttribute('hidden');
+        } else {
+          publishView.hidden = true;
+        }
+        break;
+      case 'back':
+        publishView.hidden = true;
+        break;
+    }
+  }
+  // const container = e.target.closest('[data-append]');
+  // if (container) {
+  //   container.append(...parseTextContent(container.dataset.append));
+  //   delete container.dataset.append;
+  //   return;
+  // }
+});
+
+// document.body.addEventListener('keyup', (e) => {
+//   if (e.key === 'Escape') {
+//     hideNewMessage(true);
+//   }
+// });
 
 // settings
 const settingsForm = document.querySelector('form[name="settings"]');
@@ -1172,6 +1255,7 @@ function powEvent(evt, options) {
 
     worker.onerror = (err) => {
       worker.terminate();
+      // promptError(msg.data.error, {});
       cancelBtn.removeEventListener('click', onCancel);
       reject(err);
     };

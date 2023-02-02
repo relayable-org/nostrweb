@@ -8,7 +8,8 @@ form,
   --padding: 1.2rem;
   display: flex;
   flex-direction: column;
-  padding: var(--gap);
+  max-width: var(--content-width);
+  padding: 0 var(--gap);
 }
 
 fieldset {
@@ -21,7 +22,7 @@ legend {
   display: none;
   width: 100%;
 }
-#newMessage legend {
+#newNote legend {
   display: block;
 }
 
@@ -82,17 +83,17 @@ textarea {
 textarea:focus {
   min-height: 3.5rem;
 }
-#newMessage textarea {
+#newNote textarea {
   min-height: 10rem;
 }
-#newMessage textarea:focus {
+#newNote textarea:focus {
   min-height: 18rem;
 }
 @media (orientation: portrait) {
-  #newMessage textarea {
+  #newNote textarea {
     min-height: 8rem;
   }
-  #newMessage textarea:focus {
+  #newNote textarea:focus {
     min-height: 15rem;
   }
 }
@@ -235,7 +236,7 @@ button#publish {
 button[name="back"] {
   display: none;
 }
-#newMessage button[name="back"] {
+#newNote button[name="back"] {
   align-self: end;
   display: inherit;
 }
