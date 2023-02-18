@@ -1,21 +1,10 @@
-import {relayPool, generatePrivateKey, getPublicKey, signEvent} from 'nostr-tools';
+import {generatePrivateKey, getEventHash, getPublicKey, signEvent} from 'nostr-tools';
+import {publish, sub, unsubAll} from './relays';
 import {bounce} from './utils.js';
 import {zeroLeadingBitsCount} from './cryptoutils.js';
 import {elem, parseTextContent} from './domutil.js';
 import {dateTime, formatTime} from './timeutil.js';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
-
-const pool = relayPool();
-// pool.addRelay('wss://relay.nostr.info', {read: true, write: true});
-// pool.addRelay('wss://relay.damus.io', {read: true, write: true});
-// pool.addRelay('wss://relay.snort.social', {read: true, write: true});
-
-pool.addRelay('wss://relay.nostr.ch', {read: true, write: true});
-pool.addRelay('wss://nostr.openchain.fr', {read: true, write: true});
-pool.addRelay('wss://eden.nostr.land', {read: true, write: true});
-pool.addRelay('wss://nostr.einundzwanzig.space', {read: true, write: true});
-pool.addRelay('wss://relay.nostrich.de', {read: true, write: true});
-pool.addRelay('wss://nostr.cercatrova.me', {read: true, write: true});
 
 function onEvent(evt, relay) {
   switch (evt.kind) {
@@ -46,14 +35,8 @@ let pubkey = localStorage.getItem('pub_key') || (() => {
   return pubkey;
 })();
 
-const subList = [];
-const unSubAll = () => {
-  subList.forEach(sub => sub.unsub());
-  subList.length = 0;
-};
-
 function sub24hFeed() {
-  subList.push(pool.sub({
+  sub({
     cb: onEvent,
     filter: {
       kinds: [0, 1, 2, 7],
@@ -61,7 +44,7 @@ function sub24hFeed() {
       since: Math.floor((Date.now() * 0.001) - (24 * 60 * 60)),
       limit: 50,
     }
-  }));
+  });
 }
 
 function subNoteAndProfile(id) {
@@ -71,18 +54,18 @@ function subNoteAndProfile(id) {
 }
 
 function subTextNote(eventId) {
-  subList.push(pool.sub({
+  sub({
     cb: onEvent,
     filter: {
       ids: [eventId],
       kinds: [1],
       limit: 1,
     }
-  }));
+  });
 }
 
 function subProfile(pubkey) {
-  subList.push(pool.sub({
+  sub({
     cb: (evt, relay) => {
       console.log('found profile, unsub subTextNote somehow')
       // renderProfile(evt, relay);
@@ -93,16 +76,16 @@ function subProfile(pubkey) {
       kinds: [0],
       limit: 1,
     }
-  }));
+  });
   // get notes for profile
-  subList.push(pool.sub({
+  sub({
     cb: onEvent,
     filter: {
       authors: [pubkey],
       kinds: [1],
       limit: 50,
     }
-  }));
+  });
 }
 
 const containers = [
@@ -114,39 +97,6 @@ const containers = [
   // }
 ];
 let activeContainerIndex = null;
-
-// const profileContainer = document.querySelector('#profile');
-// const profileAbout = profileContainer.querySelector('.profile-about');
-// const profileName = profileContainer.querySelector('.profile-name');
-// const profilePubkey = profileContainer.querySelector('.profile-pubkey');
-// const profilePubkeyLabel = profileContainer.querySelector('.profile-pubkey-label');
-// const profileImage = profileContainer.querySelector('.profile-image');
-// const textNoteContainer = document.querySelector('#textnote');
-
-// function clearProfile() {
-//   profileAbout.textContent = '';
-//   profileName.textContent = '';
-//   profilePubkey.textContent = '';
-//   profilePubkeyLabel.hidden = true;
-//   profileImage.removeAttribute('src');
-//   profileImage.hidden = true;
-// }
-// function renderProfile(evt, relay) {
-//   profileContainer.dataset.pubkey = evt.pubkey;
-//   profilePubkey.textContent = evt.pubkey;
-//   profilePubkeyLabel.hidden = false;
-//   const content = parseContent(evt.content);
-//   if (content) {
-//     profileAbout.textContent = content.about;
-//     profileName.textContent = content.name;
-//     const noxyImg = validatePow(evt) && getNoxyUrl('data', content.picture, evt.id, relay);
-//     if (noxyImg) {
-//       profileImage.setAttribute('src', noxyImg);
-//       profileImage.hidden = false;
-//     }
-//   }
-// }
-
 
 const textNoteList = []; // could use indexDB
 const eventRelayMap = {}; // eventId: [relay1, relay2]
@@ -355,6 +305,8 @@ function linkPreview(href, id, relay) {
     id: previewId
   });
 }
+
+const writeInput = document.querySelector('textarea[name="message"]');
 
 function createTextNote(evt, relay) {
   const {host, img, name, time, userName} = getMetadata(evt, relay);
@@ -625,7 +577,6 @@ function getReplyTo(evt) {
 }
 
 const writeForm = document.querySelector('#writeForm');
-const writeInput = document.querySelector('textarea[name="message"]');
 
 const elemShrink = () => {
   const height = writeInput.style.height || writeInput.getBoundingClientRect().height;
@@ -718,17 +669,16 @@ async function upvote(eventId, eventPubkey) {
     return;
   }
   const privatekey = localStorage.getItem('private_key');
-  const sig = await signEvent(newReaction, privatekey).catch(console.error);
+  const sig = signEvent(newReaction, privatekey);
+  // TODO: validateEvent
   if (sig) {
     statusElem.textContent = 'publishing…';
-    const ev = await pool.publish({...newReaction, sig}, (status, url) => {
-      if (status === 0) {
-        console.info(`publish request sent to ${url}`);
+    publish({...newReaction, sig}, (relay, error) => {
+      if (error) {
+        return console.error(error, relay);
       }
-      if (status === 1) {
-        console.info(`event published by ${url}`);
-      }
-    }).catch(console.error);
+      console.info(`event published by ${relay}`);
+    });
     reactionBtn.disabled = false;
   }
 }
@@ -736,7 +686,7 @@ async function upvote(eventId, eventPubkey) {
 // send
 const sendStatus = document.querySelector('#sendstatus');
 const onSendError = err => sendStatus.textContent = err.message;
-const publish = document.querySelector('#publish');
+const publishBtn = document.querySelector('#publish');
 writeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   // const pubkey = localStorage.getItem('pub_key');
@@ -753,7 +703,7 @@ writeForm.addEventListener('submit', async (e) => {
     sendStatus.textContent = '';
     writeInput.value = '';
     writeInput.style.removeProperty('height');
-    publish.disabled = true;
+    publishBtn.disabled = true;
     if (replyTo) {
       localStorage.removeItem('reply_to');
       publishView.append(writeForm);
@@ -772,23 +722,22 @@ writeForm.addEventListener('submit', async (e) => {
     close();
     return;
   }
-  const sig = await signEvent(newEvent, privatekey).catch(onSendError);
+  const sig = signEvent(newEvent, privatekey);
+  // TODO validateEvent
   if (sig) {
     sendStatus.textContent = 'publishing…';
-    const ev = await pool.publish({...newEvent, sig}, (status, url) => {
-      if (status === 0) {
-        console.info(`publish request sent to ${url}`);
+    publish({...newEvent, sig}, (relay, error) => {
+      if (error) {
+        return console.log(error, relay);
       }
-      if (status === 1) {
-        close();
-        // console.info(`event published by ${url}`, ev);
-      }
+      console.info(`publish request sent to ${relay}`);
+      close();
     });
   }
 });
 
 writeInput.addEventListener('input', () => {
-  publish.disabled = !writeInput.value.trimRight();
+  publishBtn.disabled = !writeInput.value.trimRight();
   updateElemHeight(writeInput);
 });
 writeInput.addEventListener('blur', () => sendStatus.textContent = '');
@@ -918,7 +867,7 @@ switch(location.pathname) {
 
 window.addEventListener('popstate', (event) => {
   // console.log(`popstate: ${location.pathname}, state: ${JSON.stringify(event.state)}`);
-  unSubAll();
+  unsubAll();
   if (event.state?.pubkey) {
     subProfile(event.state.pubkey);
     view(`/${event.state.pubkey}`);
@@ -961,18 +910,18 @@ document.body.addEventListener('click', (e) => {
       switch(href) {
         case '/':
           navigate('/');
-          unSubAll();
+          unsubAll();
           sub24hFeed();
           break;
         default:
           switch(a.dataset.nav) {
             case '/[profile]':
-              unSubAll();
+              unsubAll();
               subProfile(pubkey);
               navigate({pubkey});
               break;
             case '/[note]':
-              unSubAll();
+              unsubAll();
               subTextNote(id)
               navigate({note: id});
               break;
@@ -1144,18 +1093,18 @@ profileForm.addEventListener('submit', async (e) => {
     return;
   }
   const privatekey = localStorage.getItem('private_key');
-  const sig = await signEvent(newProfile, privatekey).catch(console.error);
+  const sig = signEvent(newProfile, privatekey);
+  // TODO: validateEvent
   if (sig) {
-    const ev = await pool.publish({...newProfile, sig}, (status, url) => {
-      if (status === 0) {
-        console.info(`publish request sent to ${url}`);
+    publish({...newProfile, sig}, (relay, error) => {
+      if (error) {
+        return console.error(error, relay);
       }
-      if (status === 1) {
-        profileStatus.textContent = 'profile metadata successfully published';
-        profileStatus.hidden = false;
-        profileSubmit.disabled = true;
-      }
-    }).catch(console.error);
+      console.info(`publish request sent to ${relay}`);
+      profileStatus.textContent = 'profile metadata successfully published';
+      profileStatus.hidden = false;
+      profileSubmit.disabled = true;
+    });
   }
 });
 
@@ -1223,7 +1172,10 @@ function validatePow(evt) {
 function powEvent(evt, options) {
   const {difficulty, statusElem, timeout} = options;
   if (difficulty === 0) {
-    return Promise.resolve(evt);
+    return Promise.resolve({
+      id: getEventHash(evt),
+      ...evt,
+    });
   }
   const cancelBtn = elem('button', {className: 'btn-inline'}, [elem('small', {}, 'cancel')]);
   statusElem.replaceChildren('working…', cancelBtn);

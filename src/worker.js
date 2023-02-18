@@ -26,7 +26,7 @@ function mine(event, difficulty, timeout = 5) {
     const id = getEventHash(event);
     if (zeroLeadingBitsCount(id) === difficulty) {
       console.timeEnd('pow');
-      return event;
+      return {id, ...event};
     }
   }
 }
