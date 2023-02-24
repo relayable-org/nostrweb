@@ -1,4 +1,4 @@
-import {generatePrivateKey, getEventHash, getPublicKey, signEvent} from 'nostr-tools';
+import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
 import {publish, sub, unsubAll} from './relays';
 import {bounce} from './utils.js';
 import {zeroLeadingBitsCount} from './cryptoutils.js';
@@ -137,10 +137,17 @@ function handleTextNote(evt, relay) {
     eventRelayMap[evt.id] = [relay, ...(eventRelayMap[evt.id])];
   } else {
     eventRelayMap[evt.id] = [relay];
+    const evtWithNip19 = {
+      nip19: {
+        note: nip19.noteEncode(evt.id),
+        npub: nip19.npubEncode(evt.pubkey),
+      },
+      ...evt
+    };
     if (evt.tags.some(hasEventTag)) {
-      handleReply(evt, relay);
+      handleReply(evtWithNip19, relay);
     } else {
-      textNoteList.push(evt);
+      textNoteList.push(evtWithNip19);
     }
   }
   if (!getViewElem(evt.id)) {
@@ -324,9 +331,9 @@ function createTextNote(evt, relay) {
       ${evt.tags.length ? `\nTags ${JSON.stringify(evt.tags)}\n` : ''}
       ${evt.content}`
     }, [
-      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.pubkey}`, data: {nav: '/[profile]'}}, name || userName),
+      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.nip19.npub}`, data: {nav: '/[profile]'}}, name || userName),
       ' ',
-      elem('a', {href: `/${evt.id}`, data: {nav: '/[note]'}}, formatTime(time)),
+      elem('a', {href: `/${evt.nip19.note}`, data: {nav: '/[note]'}}, formatTime(time)),
     ]),
     elem('div', {/* data: isLongContent ? {append: evt.content.slice(280)} : null*/}, [
       ...content,
