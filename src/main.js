@@ -98,6 +98,7 @@ const containers = [
 ];
 let activeContainerIndex = null;
 
+
 const textNoteList = []; // could use indexDB
 const eventRelayMap = {}; // eventId: [relay1, relay2]
 
@@ -331,9 +332,9 @@ function createTextNote(evt, relay) {
       ${evt.tags.length ? `\nTags ${JSON.stringify(evt.tags)}\n` : ''}
       ${evt.content}`
     }, [
-      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.nip19.npub}`, data: {nav: '/[profile]'}}, name || userName),
+      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.nip19.npub}`, data: {nav: true}}, name || userName),
       ' ',
-      elem('a', {href: `/${evt.nip19.note}`, data: {nav: '/[note]'}}, formatTime(time)),
+      elem('a', {href: `/${evt.nip19.note}`, data: {nav: true}}, formatTime(time)),
     ]),
     elem('div', {/* data: isLongContent ? {append: evt.content.slice(280)} : null*/}, [
       ...content,
@@ -833,68 +834,36 @@ function view(route) {
   });
 }
 
-function navigate(route) {
-  if (typeof route === 'string') {
-    view(route);
-    history.pushState({}, '', route);
-    return;
+// subscribe and change view
+function route(path) {
+  unsubAll();
+  if (path === '/') {
+    sub24hFeed();
+    view('/');
+  } else if (path.length === 64 && path.match(/^\/[0-9a-z]+$/)) {
+    const {type, data} = nip19.decode(path.slice(1));
+    switch(type) {
+      case 'note':
+        subNote(data);
+        view(path);
+        break;
+      case 'npub':
+        subProfile(data);
+        view(path);
+        break;
+      default:
+        console.warn(`type ${type} not yet supported`);
+    }
   }
-  if (route.pubkey) {
-    view(`/${route.pubkey}`);
-    history.pushState(route, '', `/${route.pubkey}`);
-    return;
-  }
-  if (route.note) {
-    view(`/${route.note}`);
-    history.pushState(route, '', `/${route.note}`);
-    return;
-  }
-  if (route.pubOrNote) {
-    view(`/${route.pubOrNote}`);
-    history.pushState(route, '', `/${route.pubOrNote}`);
-    return;
-  }
-  console.warn('unhandeleded', route);
 }
 
 // onload
-switch(location.pathname) {
-  case '/':
-    sub24hFeed();
-    navigate('/');
-    break;
-  default:
-    const pubOrNote = location.pathname.slice(1);
-    if (pubOrNote.length === 64 && pubOrNote.match(/^[0-9a-f]+$/)) {
-      navigate({pubOrNote});
-      subNoteAndProfile(pubOrNote);
-    }
-    break;
-}
+route(location.pathname);
+history.pushState({}, '', location.pathname);
 
 window.addEventListener('popstate', (event) => {
   // console.log(`popstate: ${location.pathname}, state: ${JSON.stringify(event.state)}`);
-  unsubAll();
-  if (event.state?.pubkey) {
-    subProfile(event.state.pubkey);
-    view(`/${event.state.pubkey}`);
-    return;
-  }
-  if (event.state?.pubOrNote) {
-    subNoteAndProfile(event.state.pubOrNote);
-    view(`/${event.state.pubOrNote}`); // assuming note
-    return;
-  }
-  if (event.state?.note) {
-    subTextNote(event.state.note);
-    view(`/${event.state.note}`); // assuming note
-    return;
-  }
-  if (location.pathname === '/') {
-    sub24hFeed();
-    view('/');
-    return;
-  }
+  route(location.pathname);
 });
 
 const settingsView = document.querySelector('#settings');
@@ -914,29 +883,8 @@ document.body.addEventListener('click', (e) => {
         publishView.hidden = true;
       }
       const href = a.getAttribute('href');
-      switch(href) {
-        case '/':
-          navigate('/');
-          unsubAll();
-          sub24hFeed();
-          break;
-        default:
-          switch(a.dataset.nav) {
-            case '/[profile]':
-              unsubAll();
-              subProfile(pubkey);
-              navigate({pubkey});
-              break;
-            case '/[note]':
-              unsubAll();
-              subTextNote(id)
-              navigate({note: id});
-              break;
-            default:
-              console.warn('what route is that', href);
-          }
-          break;
-      }
+      route(href);
+      history.pushState({}, null, href);
       e.preventDefault();
     }
     return;
