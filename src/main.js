@@ -1,5 +1,6 @@
 import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
-import {publish, sub, unsubAll} from './relays';
+import {sub24hFeed, subNote, subProfile} from './subscriptions'
+import {publish} from './relays';
 import {bounce} from './utils.js';
 import {zeroLeadingBitsCount} from './cryptoutils.js';
 import {elem, parseTextContent} from './domutil.js';
@@ -34,59 +35,6 @@ let pubkey = localStorage.getItem('pub_key') || (() => {
   localStorage.setItem('pub_key', pubkey);
   return pubkey;
 })();
-
-function sub24hFeed() {
-  sub({
-    cb: onEvent,
-    filter: {
-      kinds: [0, 1, 2, 7],
-      // until: Math.floor(Date.now() * 0.001),
-      since: Math.floor((Date.now() * 0.001) - (24 * 60 * 60)),
-      limit: 50,
-    }
-  });
-}
-
-function subNoteAndProfile(id) {
-  // view(`/${id}`); // assume text note
-  subTextNote(id);
-  subProfile(id);
-}
-
-function subTextNote(eventId) {
-  sub({
-    cb: onEvent,
-    filter: {
-      ids: [eventId],
-      kinds: [1],
-      limit: 1,
-    }
-  });
-}
-
-function subProfile(pubkey) {
-  sub({
-    cb: (evt, relay) => {
-      console.log('found profile, unsub subTextNote somehow')
-      // renderProfile(evt, relay);
-      // view('/[profile]');
-    },
-    filter: {
-      authors: [pubkey],
-      kinds: [0],
-      limit: 1,
-    }
-  });
-  // get notes for profile
-  sub({
-    cb: onEvent,
-    filter: {
-      authors: [pubkey],
-      kinds: [1],
-      limit: 50,
-    }
-  });
-}
 
 const containers = [
   // {
@@ -836,19 +784,18 @@ function view(route) {
 
 // subscribe and change view
 function route(path) {
-  unsubAll();
   if (path === '/') {
-    sub24hFeed();
+    sub24hFeed(onEvent);
     view('/');
   } else if (path.length === 64 && path.match(/^\/[0-9a-z]+$/)) {
     const {type, data} = nip19.decode(path.slice(1));
     switch(type) {
       case 'note':
-        subNote(data);
+        subNote(data, onEvent);
         view(path);
         break;
       case 'npub':
-        subProfile(data);
+        subProfile(data, onEvent);
         view(path);
         break;
       default:
