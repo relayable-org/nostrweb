@@ -1,8 +1,34 @@
 /**
+ * throttle and debounce given function in regular time interval,
+ * but with the difference that the last call will be debounced and therefore never missed.
+ * @param {*} function to throttle and debounce
+ * @param {*} time desired interval to execute function
+ * @returns callback
+ */
+export const bounce = (
+  fn: () => void,
+  time: number,
+) => {
+  let throttle;
+  let debounce;
+  return (/*...args*/) => {
+    if (throttle) {
+    	clearTimeout(debounce);
+    	debounce = setTimeout(() => fn(/*...args*/), time);
+      return;
+    }
+    fn(/*...args*/);
+    throttle = setTimeout(() => {
+      throttle = false;
+    }, time);
+  };
+};
+
+/**
  * Intl.DateTimeFormat object
- * 
+ *
  * example:
- * 
+ *
  *   console.log(dateTime.format(new Date()));
  */
 export const dateTime = new Intl.DateTimeFormat('de-ch' /* navigator.language */, {
@@ -12,17 +38,20 @@ export const dateTime = new Intl.DateTimeFormat('de-ch' /* navigator.language */
 
 /**
  * format time relative to now, such as 5min ago
- * 
- * @param {Date} time 
+ *
+ * @param {Date} time
  * @param {string} locale
  * @returns string
- * 
+ *
  * example:
- * 
+ *
  *   console.log(timeAgo(new Date(Date.now() - 10000)));
- * 
+ *
  */
-const timeAgo = (time, locale = 'en') => {
+const timeAgo = (
+  time: Date,
+  locale: string = 'en',
+) => {
   const relativeTime = new Intl.RelativeTimeFormat(locale, {
     numeric: 'auto',
     style: 'long',
@@ -55,7 +84,7 @@ const timeAgo = (time, locale = 'en') => {
  * @param {time} date object to format
  * @return string
  */
-export const formatTime = (time) => {
+export const formatTime = (time: Date) => {
   const yesterday = new Date(Date.now() - (24 * 60 * 60 * 1000));
   if (time > yesterday) {
     return timeAgo(time);

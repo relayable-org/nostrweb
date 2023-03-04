@@ -1,10 +1,9 @@
 import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
-import {bounce} from './utils.js';
+import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
 import {zeroLeadingBitsCount} from './cryptoutils.js';
-import {elem, parseTextContent} from './domutil.js';
-import {dateTime, formatTime} from './timeutil.js';
+import {bounce, dateTime, elem, formatTime, parseTextContent} from './utils';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -35,16 +34,6 @@ let pubkey = localStorage.getItem('pub_key') || (() => {
   localStorage.setItem('pub_key', pubkey);
   return pubkey;
 })();
-
-const containers = [
-  // {
-  //   id: '/00527c2b28ea78446c148cb40cc6e442ea3d0945ff5a8b71076483398525b54d',
-  //   view: Node,
-  //   content: Node,
-  //   dom: {}
-  // }
-];
-let activeContainerIndex = null;
 
 
 const textNoteList = []; // could use indexDB
@@ -180,9 +169,7 @@ const sortByCreatedAt = (evt1, evt2) => {
 };
 
 function rerenderFeed() {
-  const domMap = getViewDom(); // TODO: this is only the current view, do this for all views
-  Object.keys(domMap).forEach(key => delete domMap[key]);
-  getViewContent().replaceChildren([]);
+  clearView();
   renderFeed();
 }
 
@@ -719,68 +706,11 @@ function updateElemHeight(el) {
 
 
 
-function getViewContent() {
-  return containers[activeContainerIndex]?.content;
-}
 
-function getViewDom() {
-  return containers[activeContainerIndex]?.dom;
-}
-
-function getViewElem(key) {
-  return containers[activeContainerIndex]?.dom[key];
-}
-
-function setViewElem(key, node) {
-  const container = containers[activeContainerIndex];
-  if (container) {
-    container.dom[key] = node;
-  }
-  return node;
-}
-
-const mainContainer = document.querySelector('main');
-
-const getContainer = (containers, route) => {
-  let container = containers.find(c => c.route === route);
-  if (container) {
-    return container;
-  }
-  const content = elem('div', {className: 'content'});
-  const view = elem('section', {className: 'view'}, [content]);
-  mainContainer.append(view);
-  container = {route, view, content, dom: {}};
-  containers.push(container);
-  return container;
-};
 
 document.body.onload = () => console.log('------------ pageload ------------')
 
-function view(route) {
-  const active = containers[activeContainerIndex];
-  active?.view.classList.remove('view-active');
-  const nextContainer = getContainer(containers, route);
-  const nextContainerIndex = containers.indexOf(nextContainer);
-  if (nextContainerIndex === activeContainerIndex) {
-    return;
-  }
-  if (active) {
-    nextContainer.view.classList.add('view-next');
-  }
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      nextContainer.view.classList.remove('view-next', 'view-prev');
-      nextContainer.view.classList.add('view-active');
-    });
-    // // console.log(activeContainerIndex, nextContainerIndex);
-    getViewContent()?.querySelectorAll('.view-prev').forEach(prev => {
-      prev.classList.remove('view-prev');
-      prev.classList.add('view-next');
-    });
-    active?.view.classList.add(nextContainerIndex < activeContainerIndex ? 'view-next' : 'view-prev');
-    activeContainerIndex = nextContainerIndex;
-  });
-}
+
 
 // subscribe and change view
 function route(path) {
