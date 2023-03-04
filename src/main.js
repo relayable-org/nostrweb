@@ -1,9 +1,9 @@
 import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
+import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
-import {zeroLeadingBitsCount} from './cryptoutils.js';
-import {bounce, dateTime, elem, formatTime, parseTextContent} from './utils';
+import {bounce, dateTime, elem, formatTime, getHost, getNoxyUrl, isWssUrl, parseTextContent, zeroLeadingBitsCount} from './utils';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -39,12 +39,6 @@ let pubkey = localStorage.getItem('pub_key') || (() => {
 const textNoteList = []; // could use indexDB
 const eventRelayMap = {}; // eventId: [relay1, relay2]
 
-const hasEventTag = tag => tag[0] === 'e';
-const isReply = ([tag, , , marker]) => tag === 'e' && marker !== 'mention';
-const isMention = ([tag, , , marker]) => tag === 'e' && marker === 'mention';
-const hasEnoughPOW = ([tag, , commitment]) => {
-  return tag === 'nonce' && commitment >= fitlerDifficulty && zeroLeadingBitsCount(note.id) >= fitlerDifficulty;
-};
 const renderNote = (evt, i, sortedFeeds) => {
   if (getViewElem(evt.id)) { // note already in view
     return;
@@ -58,13 +52,17 @@ const renderNote = (evt, i, sortedFeeds) => {
   setViewElem(evt.id, article);
 };
 
+const hasEnoughPOW = ([tag, , commitment], eventId) => {
+  return tag === 'nonce' && commitment >= fitlerDifficulty && zeroLeadingBitsCount(eventId) >= fitlerDifficulty;
+};
+
 const renderFeed = bounce(() => {
   const now = Math.floor(Date.now() * 0.001);
   textNoteList
     // dont render notes from the future
     .filter(note => note.created_at <= now)
     // if difficulty filter is configured dont render notes with too little pow
-    .filter(note => !fitlerDifficulty || note.tags.some(hasEnoughPOW))
+    .filter(note => !fitlerDifficulty || note.tags.some(tag => hasEnoughPOW(tag, note.id)))
     .sort(sortByCreatedAt)
     .reverse()
     .forEach(renderNote);
@@ -161,13 +159,6 @@ function handleReaction(evt, relay) {
 
 const restoredReplyTo = localStorage.getItem('reply_to');
 
-const sortByCreatedAt = (evt1, evt2) => {
-  if (evt1.created_at ===  evt2.created_at) {
-    // console.log('TODO: OMG exactly at the same time, figure out how to sort then', evt1, evt2);
-  }
-  return evt1.created_at > evt2.created_at ? -1 : 1;
-};
-
 function rerenderFeed() {
   clearView();
   renderFeed();
@@ -178,17 +169,6 @@ setInterval(() => {
     timeElem.textContent = formatTime(new Date(timeElem.dateTime));
   });
 }, 10000);
-
-const getNoxyUrl = (type, url, id, relay) => {
-  if (!isHttpUrl(url)) {
-    return false;
-  }
-  const link = new URL(`https://noxy.nostr.ch/${type}`);
-  link.searchParams.set('id', id);
-  link.searchParams.set('relay', relay);
-  link.searchParams.set('url', url);
-  return link;
-}
 
 const fetchQue = [];
 let fetchPending;
@@ -300,21 +280,6 @@ function createTextNote(evt, relay) {
   ], {data: {id: evt.id, pubkey: evt.pubkey, relay}});
 }
 
-const sortEventCreatedAt = (created_at) => (
-  {created_at: a},
-  {created_at: b},
-) => (
-  Math.abs(a - created_at) < Math.abs(b - created_at) ? -1 : 1
-);
-
-function isWssUrl(string) {
-  try {
-    return 'wss:' === new URL(string).protocol;
-  } catch (err) {
-    return false;
-  }
-}
-
 function handleRecommendServer(evt, relay) {
   if (getViewElem(evt.id) || !isWssUrl(evt.content)) {
     return;
@@ -326,7 +291,7 @@ function handleRecommendServer(evt, relay) {
     const closestTextNotes = textNoteList
       .filter(note => !fitlerDifficulty || note.tags.some(([tag, , commitment]) => tag === 'nonce' && commitment >= fitlerDifficulty))
       .sort(sortEventCreatedAt(evt.created_at));
-      getViewElem(closestTextNotes[0].id)?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
+    getViewElem(closestTextNotes[0].id)?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
   }
   setViewElem(evt.id, art);
 }
@@ -450,22 +415,6 @@ function setMetadata(evt, relay, content) {
   // }
 }
 
-function isHttpUrl(string) {
-  try {
-    return ['http:', 'https:'].includes(new URL(string).protocol);
-  } catch (err) {
-    return false;
-  }
-}
-
-const getHost = (url) => {
-  try {
-    return new URL(url).host;
-  } catch(err) {
-    return err;
-  }
-}
-
 const elemCanvas = (text) => {
   const canvas = elem('canvas', {height: 80, width: 80, data: {pubkey: text}});
   const context = canvas.getContext('2d');
@@ -497,26 +446,6 @@ function getMetadata(evt, relay) {
   }) : elemCanvas(evt.pubkey);
   const time = new Date(evt.created_at * 1000);
   return {host, img, name, time, userName};
-}
-
-/**
- * find reply-to ID according to nip-10, find marked reply or root tag or
- * fallback to positional (last) e tag or return null
- * @param {event} evt
- * @returns replyToID | null
- */
-function getReplyTo(evt) {
-  const eventTags = evt.tags.filter(isReply);
-  const withReplyMarker = eventTags.filter(([, , , marker]) => marker === 'reply');
-  if (withReplyMarker.length === 1) {
-    return withReplyMarker[0][1];
-  }
-  const withRootMarker = eventTags.filter(([, , , marker]) => marker === 'root');
-  if (withReplyMarker.length === 0 && withRootMarker.length === 1) {
-    return withRootMarker[0][1];
-  }
-  // fallback to deprecated positional 'e' tags (nip-10)
-  return eventTags.length ? eventTags.at(-1)[1] : null;
 }
 
 const writeForm = document.querySelector('#writeForm');
@@ -971,25 +900,6 @@ function promptError(error, options = {}) {
   };
   errorOverlay.addEventListener('click', handleOverlayClick);
   errorOverlay.hidden = false;
-}
-
-/**
- * validate proof-of-work of a nostr event per nip-13.
- * the validation always requires difficulty commitment in the nonce tag.
- *
- * @param {EventObj} evt event to validate
- * TODO: @param {number} targetDifficulty target proof-of-work difficulty
- */
-function validatePow(evt) {
-  const tag = evt.tags.find(tag => tag[0] === 'nonce');
-  if (!tag) {
-    return false;
-  }
-  const difficultyCommitment = Number(tag[2]);
-  if (!difficultyCommitment || Number.isNaN(difficultyCommitment)) {
-    return false;
-  }
-  return zeroLeadingBitsCount(evt.id) >= difficultyCommitment;
 }
 
 /**

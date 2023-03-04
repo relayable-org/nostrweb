@@ -1,5 +1,5 @@
 import {getEventHash} from 'nostr-tools';
-import {zeroLeadingBitsCount} from './cryptoutils.js';
+import {zeroLeadingBitsCount} from './utils/crypto';
 
 function mine(event, difficulty, timeout = 5) {
   const max = 256; // arbitrary
