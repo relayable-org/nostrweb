@@ -9,8 +9,8 @@ export const bounce = (
   fn: () => void,
   time: number,
 ) => {
-  let throttle;
-  let debounce;
+  let throttle: number | undefined;
+  let debounce: number | undefined;
   return (/*...args*/) => {
     if (throttle) {
     	clearTimeout(debounce);
@@ -19,7 +19,7 @@ export const bounce = (
     }
     fn(/*...args*/);
     throttle = setTimeout(() => {
-      throttle = false;
+      clearTimeout(throttle);
     }, time);
   };
 };

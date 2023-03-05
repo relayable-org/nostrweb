@@ -1,7 +1,18 @@
 {
   "compilerOptions": {
+    "alwaysStrict": true,
     "moduleResolution": "node",
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": false,
+    "strictNullChecks": true,
     "target": "es2022"
   },
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": [
+    "dist",
+    "esbuildconf.js",
+    "node_modules",
+    "**/*.test.ts"
+  ]
 }
