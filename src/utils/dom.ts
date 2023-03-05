@@ -18,11 +18,11 @@ type Attributes = {
  * @param {Array<HTMLElement|string>} children
  * @return HTMLElement
  */
-export const elem = (
-  name: keyof HTMLElementTagNameMap,
-  attrs: Attributes = {},
-  children: Array<Node> | string = []
-) => {
+export const elem = <Name extends keyof HTMLElementTagNameMap>(
+  name: Extract<Name, keyof HTMLElementTagNameMap>,
+  attrs: Attributes = {}, // TODO optional
+  children: Array<Node> | string = [], // TODO optional
+): HTMLElementTagNameMap[Name] => {
   const {data, ...props} = attrs;
   const el = document.createElement(name);
   Object.assign(el, props);
@@ -126,4 +126,45 @@ export const parseTextContent = (
     parsedContent,
     {firstLink}
   ];
+};
+
+/**
+ * creates a small profile image
+ * @param text to pass pubkey
+ * @returns HTMLCanvasElement | null
+ */
+export const elemCanvas = (text: string) => {
+  const canvas = elem('canvas', {
+    height: 80,
+    width: 80,
+    data: {pubkey: text}
+  });
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+  const color = `#${text.slice(0, 6)}`;
+  context.fillStyle = color;
+  context.fillRect(0, 0, 80, 80);
+  context.fillStyle = '#111';
+  context.fillRect(0, 50, 80, 32);
+  context.font = 'bold 18px monospace';
+  if (color === '#000000') {
+    context.fillStyle = '#fff';
+  }
+  context.fillText(text.slice(0, 8), 2, 46);
+  return canvas;
+};
+
+/**
+ * creates a placeholder element that animates the height to 0
+ * @param element to get the initial height from
+ * @returns HTMLDivElement
+ */
+export const elemShrink = (el: HTMLElement) => {
+  const height = el.style.height || el.getBoundingClientRect().height;
+  const shrink = elem('div', {className: 'shrink-out'});
+  shrink.style.height = `${height}px`;
+  shrink.addEventListener('animationend', () => shrink.remove(), {once: true});
+  return shrink;
 };

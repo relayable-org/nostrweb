@@ -2,7 +2,7 @@ import {elem} from './utils';
 
 type Container = {
   id: string;
-  view: HTMLSelectElement;
+  view: HTMLElement;
   content: HTMLDivElement;
   dom: {
     [eventId: string]: HTMLElement

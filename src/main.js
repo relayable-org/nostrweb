@@ -3,7 +3,7 @@ import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
-import {bounce, dateTime, elem, formatTime, getHost, getNoxyUrl, isWssUrl, parseTextContent, zeroLeadingBitsCount} from './utils';
+import {bounce, dateTime, elem, elemCanvas, elemShrink, formatTime, getHost, getNoxyUrl, isWssUrl, parseTextContent, zeroLeadingBitsCount} from './utils';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -415,22 +415,6 @@ function setMetadata(evt, relay, content) {
   // }
 }
 
-const elemCanvas = (text) => {
-  const canvas = elem('canvas', {height: 80, width: 80, data: {pubkey: text}});
-  const context = canvas.getContext('2d');
-  const color = `#${text.slice(0, 6)}`;
-  context.fillStyle = color;
-  context.fillRect(0, 0, 80, 80);
-  context.fillStyle = '#111';
-  context.fillRect(0, 50, 80, 32);
-  context.font = 'bold 18px monospace';
-  if (color === '#000000') {
-    context.fillStyle = '#fff';
-  }
-  context.fillText(text.slice(0, 8), 2, 46);
-  return canvas;
-}
-
 function getMetadata(evt, relay) {
   const host = getHost(relay);
   const user = userList.find(user => user.pubkey === evt.pubkey);
@@ -450,20 +434,12 @@ function getMetadata(evt, relay) {
 
 const writeForm = document.querySelector('#writeForm');
 
-const elemShrink = () => {
-  const height = writeInput.style.height || writeInput.getBoundingClientRect().height;
-  const shrink = elem('div', {className: 'shrink-out'});
-  shrink.style.height = `${height}px`;
-  shrink.addEventListener('animationend', () => shrink.remove(), {once: true});
-  return shrink;
-}
-
 writeInput.addEventListener('focusout', () => {
   const reply_to = localStorage.getItem('reply_to');
   if (reply_to && writeInput.value === '') {
     writeInput.addEventListener('transitionend', (event) => {
       if (!reply_to || reply_to === localStorage.getItem('reply_to') && !writeInput.style.height) { // should prob use some class or data-attr instead of relying on height
-        writeForm.after(elemShrink());
+        writeForm.after(elemShrink(writeInput));
         writeForm.remove();
         localStorage.removeItem('reply_to');
       }
@@ -472,7 +448,7 @@ writeInput.addEventListener('focusout', () => {
 });
 
 function appendReplyForm(el) {
-  writeForm.before(elemShrink());
+  writeForm.before(elemShrink(writeInput));
   writeInput.blur();
   writeInput.style.removeProperty('height');
   el.after(writeForm);
