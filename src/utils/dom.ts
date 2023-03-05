@@ -1,10 +1,10 @@
-type Attributes = {
-  [key: string]: string | number;
-} & {
-  data?: {
+type DataAttributes = {
+  data: {
     [key: string]: string | number;
   }
 };
+
+type Attributes<Type> = Partial<Type & DataAttributes>;
 
 /**
  * example usage:
@@ -15,31 +15,43 @@ type Attributes = {
  *
  * @param {string} name
  * @param {HTMLElement.prototype} props
- * @param {Array<HTMLElement|string>} children
+ * @param {Array<Node> | string | number} children
  * @return HTMLElement
  */
 export const elem = <Name extends keyof HTMLElementTagNameMap>(
   name: Extract<Name, keyof HTMLElementTagNameMap>,
-  attrs: Attributes = {}, // TODO optional
-  children: Array<Node> | string = [], // TODO optional
+  attrs?: Attributes<HTMLElementTagNameMap[Name]>,
+  children?: Array<HTMLElement | string> | string | number,
 ): HTMLElementTagNameMap[Name] => {
-  const {data, ...props} = attrs;
   const el = document.createElement(name);
-  Object.assign(el, props);
-  if (Array.isArray(children)) {
-    el.append(...children);
-  } else {
-    const childType = typeof children;
-    if (childType === 'number' || childType === 'string') {
-      el.append(children);
-    } else {
-      console.error('call me');
+  if (attrs) {
+    const {data, ...props} = attrs;
+    Object.assign(el, props);
+    if (data) {
+      Object.entries(data).forEach(([key, value]) => {
+        el.dataset[key] = value as string;
+      });
     }
   }
-  if (data) {
-    Object.entries(data).forEach(([key, value]) => {
-      el.dataset[key] = value as string;
-    });
+  if (children != null) {
+    if (Array.isArray(children)) {
+      el.append(...children);
+    } else {
+      switch (typeof children) {
+        case 'number':
+          el.append(`${children}`);
+          break;
+        case 'string':
+          el.append(children);
+          break;
+        default:
+          if (children instanceof Element) {
+            el.append(children);
+            break;
+          }
+          console.error(`expected element, string or number but got ${typeof children}`, children);
+      }
+    }
   }
   return el;
 };
