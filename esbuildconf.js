@@ -17,7 +17,7 @@ export const options = {
     'src/assets/star-fill.svg',
     'src/favicon.ico',
     'src/index.html',
-    'src/main.css',
+    'src/styles/main.css',
     'src/main.js',
     'src/manifest.json',
     'src/worker.js',
