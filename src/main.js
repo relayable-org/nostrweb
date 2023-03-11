@@ -1,6 +1,6 @@
 import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
-import {elem, elemCanvas, elemShrink, parseTextContent} from './utils/dom';
+import {elem, elemCanvas, elemShrink, lockScroll, parseTextContent, unlockScroll} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
 import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
@@ -462,9 +462,6 @@ function appendReplyForm(el) {
   }
   requestAnimationFrame(() => writeInput.focus());
 }
-
-const lockScroll = () => document.body.style.overflow = 'hidden';
-const unlockScroll = () => document.body.style.removeProperty('overflow');
 
 let fitlerDifficulty = JSON.parse(localStorage.getItem('filter_difficulty')) ?? 0;
 const filterDifficultyInput = document.querySelector('#filterDifficulty');

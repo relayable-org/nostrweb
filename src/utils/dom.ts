@@ -56,6 +56,12 @@ export const elem = <Name extends keyof HTMLElementTagNameMap>(
   return el;
 };
 
+/** freeze global page scrolling */
+export const lockScroll = () => document.body.style.overflow = 'hidden';
+
+/** free global page scrolling */
+export const unlockScroll = () => document.body.style.removeProperty('overflow');
+
 export const isValidURL = (url: URL) => {
   if (!['http:', 'https:'].includes(url.protocol)) {
     return false;
