@@ -7,6 +7,7 @@ import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
+import {config} from './settings';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -29,15 +30,6 @@ function onEvent(evt, relay) {
       // console.log(`TODO: add support for event kind ${evt.kind}`/*, evt*/)
   }
 }
-
-let pubkey = localStorage.getItem('pub_key') || (() => {
-  const privatekey = generatePrivateKey();
-  const pubkey = getPublicKey(privatekey);
-  localStorage.setItem('private_key', privatekey);
-  localStorage.setItem('pub_key', pubkey);
-  return pubkey;
-})();
-
 
 const textNoteList = []; // could use indexDB
 const eventRelayMap = {}; // eventId: [relay1, relay2]
@@ -152,7 +144,7 @@ function handleReaction(evt, relay) {
     const button = article.querySelector('button[name="star"]');
     const reactions = button.querySelector('[data-reactions]');
     reactions.textContent = reactionMap[eventId].length;
-    if (evt.pubkey === pubkey) {
+    if (evt.pubkey === config.pubkey) {
       const star = button.querySelector('img[src*="star"]');
       star?.setAttribute('src', '/assets/star-fill.svg');
       star?.setAttribute('title', getReactionList(eventId).join(' '));
@@ -240,7 +232,7 @@ function createTextNote(evt, relay) {
   // const isLongContent = evt.content.trimRight().length > 280;
   // const content = isLongContent ? evt.content.slice(0, 280) : evt.content;
   const hasReactions = reactionMap[evt.id]?.length > 0;
-  const didReact = hasReactions && !!reactionMap[evt.id].find(reaction => reaction.pubkey === pubkey);
+  const didReact = hasReactions && !!reactionMap[evt.id].find(reaction => reaction.pubkey === config.pubkey);
   const replyFeed = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
   const [content, {firstLink}] = parseTextContent(evt.content);
   const body = elem('div', {className: 'mbox-body'}, [
@@ -506,7 +498,7 @@ async function upvote(eventId, eventPubkey) {
   reactionBtn.disabled = true;
   const newReaction = await powEvent({
     kind: 7,
-    pubkey, // TODO: lib could check that this is the pubkey of the key to sign with
+    pubkey: config.pubkey, // TODO: lib could check that this is the pubkey of the key to sign with
     content: '+',
     tags,
     created_at: Math.floor(Date.now() * 0.001),
@@ -537,9 +529,8 @@ const onSendError = err => sendStatus.textContent = err.message;
 const publishBtn = document.querySelector('#publish');
 writeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  // const pubkey = localStorage.getItem('pub_key');
   const privatekey = localStorage.getItem('private_key');
-  if (!pubkey || !privatekey) {
+  if (!config.pubkey || !privatekey) {
     return onSendError(new Error('no pubkey/privatekey'));
   }
   const content = writeInput.value.trimRight();
@@ -562,7 +553,7 @@ writeForm.addEventListener('submit', async (e) => {
   const newEvent = await powEvent({
     kind: 1,
     content,
-    pubkey,
+    pubkey: config.pubkey,
     tags,
     created_at: Math.floor(Date.now() * 0.001),
   }, {difficulty, statusElem: sendStatus, timeout}).catch(console.warn);
@@ -751,7 +742,7 @@ importBtn.addEventListener('click', () => {
     localStorage.setItem('pub_key', pubkeyInput);
     statusMessage.textContent = 'stored private and public key locally!';
     statusMessage.hidden = false;
-    pubkey = pubkeyInput;
+    config.pubkey = pubkeyInput;
   }
 });
 
@@ -819,7 +810,7 @@ profileForm.addEventListener('submit', async (e) => {
   const form = new FormData(profileForm);
   const newProfile = await powEvent({
     kind: 0,
-    pubkey,
+    pubkey: config.pubkey,
     content: JSON.stringify(Object.fromEntries(form)),
     tags: [],
     created_at: Math.floor(Date.now() * 0.001),
