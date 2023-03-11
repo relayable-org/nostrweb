@@ -1,3 +1,5 @@
+import {isValidURL} from './url';
+
 type DataAttributes = {
   data: {
     [key: string]: string | number;
@@ -61,32 +63,6 @@ export const lockScroll = () => document.body.style.overflow = 'hidden';
 
 /** free global page scrolling */
 export const unlockScroll = () => document.body.style.removeProperty('overflow');
-
-export const isValidURL = (url: URL) => {
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    return false;
-  }
-  if (!['', '443', '80'].includes(url.port)) {
-    return false;
-  }
-  if (url.hostname === 'localhost') {
-    return false;
-  }
-  const lastDot = url.hostname.lastIndexOf('.');
-  if (lastDot < 1) {
-    return false;
-  }
-  if (url.hostname.slice(lastDot) === '.local') {
-    return false;
-  }
-  if (url.hostname.slice(lastDot + 1).match(/^[\d]+$/)) { // there should be no tld with numbers, possible ipv4
-    return false;
-  }
-  if (url.hostname.includes(':')) { // possibly an ipv6 addr; certainly an invalid hostname
-    return false;
-  }
-  return true;
-}
 
 /**
  * example usage:
