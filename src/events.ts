@@ -1,5 +1,5 @@
 import {Event} from 'nostr-tools';
-import {zeroLeadingBitsCount} from './utils';
+import {zeroLeadingBitsCount} from './utils/crypto';
 
 export const isMention = ([tag, , , marker]: string[]) => tag === 'e' && marker === 'mention';
 export const hasEventTag = (tag: string[]) => tag[0] === 'e';

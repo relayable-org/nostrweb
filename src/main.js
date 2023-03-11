@@ -1,9 +1,12 @@
 import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
+import {zeroLeadingBitsCount} from './utils/crypto';
+import {elem, elemCanvas, elemShrink, parseTextContent} from './utils/dom';
+import {bounce, dateTime, formatTime} from './utils/time';
+import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
-import {bounce, dateTime, elem, elemCanvas, elemShrink, formatTime, getHost, getNoxyUrl, isWssUrl, parseTextContent, zeroLeadingBitsCount} from './utils';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
