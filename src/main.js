@@ -1,6 +1,6 @@
-import {generatePrivateKey, getEventHash, getPublicKey, nip19, signEvent} from 'nostr-tools';
+import {generatePrivateKey, getPublicKey, nip19, signEvent} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
-import {elem, elemCanvas, elemShrink, lockScroll, parseTextContent, unlockScroll} from './utils/dom';
+import {elem, elemCanvas, elemShrink, parseTextContent} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
 import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
@@ -8,6 +8,7 @@ import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
 import {config} from './settings';
+import {powEvent} from './system';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -835,92 +836,3 @@ profileForm.addEventListener('submit', async (e) => {
     });
   }
 });
-
-const errorOverlay = document.querySelector('#errorOverlay');
-
-function promptError(error, options = {}) {
-  const {onAgain, onCancel} = options;
-  lockScroll();
-  errorOverlay.replaceChildren(
-    elem('h1', {className: 'error-title'}, error),
-    elem('p', {}, 'time ran out finding a proof with the desired mining difficulty. either try again, lower the mining difficulty or increase the timeout in profile settings.'),
-    elem('div', {className: 'buttons'}, [
-      onCancel ? elem('button', {data: {action: 'close'}}, 'close') : '',
-      onAgain ? elem('button', {data: {action: 'again'}}, 'try again') : '',
-    ]),
-  );
-  const handleOverlayClick = (e) => {
-    const button = e.target.closest('button');
-    if (button) {
-      switch(button.dataset.action) {
-        case 'close':
-          onCancel();
-          break;
-        case 'again':
-          onAgain();
-          break;
-      }
-      errorOverlay.removeEventListener('click', handleOverlayClick);
-      errorOverlay.hidden = true;
-      unlockScroll();
-    }
-  };
-  errorOverlay.addEventListener('click', handleOverlayClick);
-  errorOverlay.hidden = false;
-}
-
-/**
- * run proof of work in a worker until at least the specified difficulty.
- * if succcessful, the returned event contains the 'nonce' tag
- * and the updated created_at timestamp.
- *
- * powEvent returns a rejected promise if the funtion runs for longer than timeout.
- * a zero timeout makes mineEvent run without a time limit.
- * a zero mining target just resolves the promise without trying to find a 'nonce'.
- */
-function powEvent(evt, options) {
-  const {difficulty, statusElem, timeout} = options;
-  if (difficulty === 0) {
-    return Promise.resolve({
-      id: getEventHash(evt),
-      ...evt,
-    });
-  }
-  const cancelBtn = elem('button', {className: 'btn-inline'}, [elem('small', {}, 'cancel')]);
-  statusElem.replaceChildren('working…', cancelBtn);
-  statusElem.hidden = false;
-  return new Promise((resolve, reject) => {
-    const worker = new Worker('./worker.js');
-
-    const onCancel = () => {
-      worker.terminate();
-      reject('canceled');
-    };
-    cancelBtn.addEventListener('click', onCancel);
-
-    worker.onmessage = (msg) => {
-      worker.terminate();
-      cancelBtn.removeEventListener('click', onCancel);
-      if (msg.data.error) {
-        promptError(msg.data.error, {
-          onCancel: () => reject('canceled'),
-          onAgain: async () => {
-            const result = await powEvent(evt, {difficulty, statusElem, timeout}).catch(console.warn);
-            resolve(result);
-          }
-        })
-      } else {
-        resolve(msg.data.event);
-      }
-    };
-
-    worker.onerror = (err) => {
-      worker.terminate();
-      // promptError(msg.data.error, {});
-      cancelBtn.removeEventListener('click', onCancel);
-      reject(err);
-    };
-
-    worker.postMessage({event: evt, difficulty, timeout});
-  });
-}
