@@ -162,3 +162,17 @@ export const elemShrink = (el: HTMLElement) => {
   shrink.addEventListener('animationend', () => shrink.remove(), {once: true});
   return shrink;
 };
+
+
+export const updateElemHeight = (
+  el: HTMLInputElement | HTMLTextAreaElement
+) => {
+  el.style.removeProperty('height');
+  if (el.value) {
+    el.style.paddingBottom = '0';
+    el.style.paddingTop = '0';
+    el.style.height = el.scrollHeight + 'px';
+    el.style.removeProperty('padding-bottom');
+    el.style.removeProperty('padding-top');
+  }
+};

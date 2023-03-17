@@ -1,6 +1,6 @@
 import {generatePrivateKey, getPublicKey, nip19, signEvent} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
-import {elem, elemCanvas, elemShrink, parseTextContent} from './utils/dom';
+import {elem, elemCanvas, elemShrink, parseTextContent, updateElemHeight} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
 import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
 import {powEvent} from './system';
@@ -560,17 +560,6 @@ writeInput.addEventListener('input', () => {
   updateElemHeight(writeInput);
 });
 writeInput.addEventListener('blur', () => sendStatus.textContent = '');
-
-function updateElemHeight(el) {
-  el.style.removeProperty('height');
-  if (el.value) {
-    el.style.paddingBottom = 0;
-    el.style.paddingTop = 0;
-    el.style.height = el.scrollHeight + 'px';
-    el.style.removeProperty('padding-bottom');
-    el.style.removeProperty('padding-top');
-  }
-}
 
 
 
