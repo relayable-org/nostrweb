@@ -1,4 +1,4 @@
-import {generatePrivateKey, getPublicKey, nip19, signEvent} from 'nostr-tools';
+import {nip19, signEvent} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
 import {elem, elemCanvas, elemShrink, parseTextContent, updateElemHeight} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
@@ -8,7 +8,7 @@ import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
-import {config} from './settings';
+import {closeSettingsView, config, toggleSettingsView} from './settings';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -608,7 +608,6 @@ window.addEventListener('popstate', (event) => {
   route(location.pathname);
 });
 
-const settingsView = document.querySelector('#settings');
 const publishView = document.querySelector('#newNote');
 
 document.body.addEventListener('click', (e) => {
@@ -618,9 +617,7 @@ document.body.addEventListener('click', (e) => {
   if (a) {
     if ('nav' in a.dataset) {
       e.preventDefault();
-      if (!settingsView.hidden) {
-        settingsView.hidden = true;
-      }
+      closeSettingsView();
       if (!publishView.hidden) {
         publishView.hidden = true;
       }
@@ -646,7 +643,7 @@ document.body.addEventListener('click', (e) => {
         upvote(id, pubkey);
         break;
       case 'settings':
-        settingsView.hidden = !settingsView.hidden;
+        toggleSettingsView();
         break;
       case 'new-note':
         if (publishView.hidden) {
@@ -682,129 +679,3 @@ document.body.addEventListener('click', (e) => {
 //     hideNewMessage(true);
 //   }
 // });
-
-// settings
-const settingsForm = document.querySelector('form[name="settings"]');
-const privateKeyInput = settingsForm.querySelector('#privatekey');
-const pubKeyInput = settingsForm.querySelector('#pubkey');
-const statusMessage = settingsForm.querySelector('#keystatus');
-const generateBtn = settingsForm.querySelector('button[name="generate"]');
-const importBtn = settingsForm.querySelector('button[name="import"]');
-const privateTgl = settingsForm.querySelector('button[name="privatekey-toggle"]');
-
-generateBtn.addEventListener('click', () => {
-  const privatekey = generatePrivateKey();
-  const pubkey = getPublicKey(privatekey);
-  if (validKeys(privatekey, pubkey)) {
-    privateKeyInput.value = privatekey;
-    pubKeyInput.value = pubkey;
-    statusMessage.textContent = 'private-key created!';
-    statusMessage.hidden = false;
-  }
-});
-
-importBtn.addEventListener('click', () => {
-  const privatekey = privateKeyInput.value;
-  const pubkeyInput = pubKeyInput.value;
-  if (validKeys(privatekey, pubkeyInput)) {
-    localStorage.setItem('private_key', privatekey);
-    localStorage.setItem('pub_key', pubkeyInput);
-    statusMessage.textContent = 'stored private and public key locally!';
-    statusMessage.hidden = false;
-    config.pubkey = pubkeyInput;
-  }
-});
-
-settingsForm.addEventListener('input', () => validKeys(privateKeyInput.value, pubKeyInput.value));
-privateKeyInput.addEventListener('paste', (event) => {
-  if (pubKeyInput.value || !event.clipboardData) {
-    return;
-  }
-  if (privateKeyInput.value === '' || ( // either privatekey field is empty
-    privateKeyInput.selectionStart === 0 // or the whole text is selected and replaced with the clipboard
-    && privateKeyInput.selectionEnd === privateKeyInput.value.length
-  )) { // only generate the pubkey if no data other than the text from clipboard will be used
-    try {
-      pubKeyInput.value = getPublicKey(event.clipboardData.getData('text'));
-    } catch(err) {} // settings form will call validKeys on input and display the error
-  }
-});
-
-function validKeys(privatekey, pubkey) {
-  try {
-    if (getPublicKey(privatekey) === pubkey) {
-      statusMessage.hidden = true;
-      statusMessage.textContent = 'public-key corresponds to private-key';
-      importBtn.removeAttribute('disabled');
-      return true;
-    } else {
-      statusMessage.textContent = 'private-key does not correspond to public-key!'
-    }
-  } catch (e) {
-    statusMessage.textContent = `not a valid private-key: ${e.message || e}`;
-  }
-  statusMessage.hidden = false;
-  importBtn.setAttribute('disabled', true);
-  return false;
-}
-
-privateTgl.addEventListener('click', () => {
-  privateKeyInput.type = privateKeyInput.type === 'text' ? 'password' : 'text';
-});
-
-privateKeyInput.value = localStorage.getItem('private_key');
-pubKeyInput.value = localStorage.getItem('pub_key');
-
-// profile
-const profileForm = document.querySelector('form[name="profile"]');
-const profileSubmit = profileForm.querySelector('button[type="submit"]');
-const profileStatus = document.querySelector('#profilestatus');
-const onProfileError = err => {
-  profileStatus.hidden = false;
-  profileStatus.textContent = err.message
-};
-profileForm.addEventListener('input', (e) => {
-  if (e.target.nodeName === 'TEXTAREA') {
-    updateElemHeight(e.target);
-  }
-  const form = new FormData(profileForm);
-  const name = form.get('name');
-  const about = form.get('about');
-  const picture = form.get('picture');
-  profileSubmit.disabled = !(name || about || picture);
-});
-
-profileForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = new FormData(profileForm);
-  const newProfile = await powEvent({
-    kind: 0,
-    pubkey: config.pubkey,
-    content: JSON.stringify(Object.fromEntries(form)),
-    tags: [],
-    created_at: Math.floor(Date.now() * 0.001),
-  }, {
-    difficulty: config.difficulty,
-    statusElem: profileStatus,
-    timeout: config.timeout,
-  }).catch(console.warn);
-  if (!newProfile) {
-    profileStatus.textContent = 'publishing profile data canceled';
-    profileStatus.hidden = false;
-    return;
-  }
-  const privatekey = localStorage.getItem('private_key');
-  const sig = signEvent(newProfile, privatekey);
-  // TODO: validateEvent
-  if (sig) {
-    publish({...newProfile, sig}, (relay, error) => {
-      if (error) {
-        return console.error(error, relay);
-      }
-      console.info(`publish request sent to ${relay}`);
-      profileStatus.textContent = 'profile metadata successfully published';
-      profileStatus.hidden = false;
-      profileSubmit.disabled = true;
-    });
-  }
-});
