@@ -483,22 +483,6 @@ writeInput.addEventListener('input', () => {
 });
 writeInput.addEventListener('blur', () => sendStatus.textContent = '');
 
-
-
-
-
-
-
-
-
-
-
-
-
-document.body.onload = () => console.log('------------ pageload ------------')
-
-
-
 // subscribe and change view
 function route(path) {
   if (path === '/') {
@@ -532,62 +516,57 @@ window.addEventListener('popstate', (event) => {
 
 const publishView = document.querySelector('#newNote');
 
-document.body.addEventListener('click', (e) => {
-  const a = e.target.closest('a');
-  const pubkey = e.target.closest('[data-pubkey]')?.dataset.pubkey;
+const handleLink = (e, a) => {
+  if ('nav' in a.dataset) {
+    e.preventDefault();
+    closeSettingsView();
+    if (!publishView.hidden) {
+      publishView.hidden = true;
+    }
+    const href = a.getAttribute('href');
+    route(href);
+    history.pushState({}, null, href);
+    e.preventDefault();
+  }
+};
+
+const handleButton = (e, button) => {
   const id = e.target.closest('[data-id]')?.dataset.id;
-  if (a) {
-    if ('nav' in a.dataset) {
-      e.preventDefault();
-      closeSettingsView();
-      if (!publishView.hidden) {
+  switch(button.name) {
+    case 'reply':
+      if (localStorage.getItem('reply_to') === id) {
+        writeInput.blur();
+        return;
+      }
+      appendReplyForm(button.closest('.buttons'));
+      localStorage.setItem('reply_to', id);
+      break;
+    case 'star':
+      const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
+      handleUpvote(note);
+      break;
+    case 'settings':
+      toggleSettingsView();
+      break;
+    case 'new-note':
+      if (publishView.hidden) {
+        localStorage.removeItem('reply_to'); // should it forget old replyto context?
+        publishView.append(writeForm);
+        if (writeInput.value.trimRight()) {
+          writeInput.style.removeProperty('height');
+        }
+        requestAnimationFrame(() => {
+          updateElemHeight(writeInput);
+          writeInput.focus();
+        });
+        publishView.removeAttribute('hidden');
+      } else {
         publishView.hidden = true;
       }
-      const href = a.getAttribute('href');
-      route(href);
-      history.pushState({}, null, href);
-      e.preventDefault();
-    }
-    return;
-  }
-  const button = e.target.closest('button');
-  if (button) {
-    switch(button.name) {
-      case 'reply':
-        if (localStorage.getItem('reply_to') === id) {
-          writeInput.blur();
-          return;
-        }
-        appendReplyForm(button.closest('.buttons'));
-        localStorage.setItem('reply_to', id);
-        break;
-      case 'star':
-        const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
-        handleUpvote(note);
-        break;
-      case 'settings':
-        toggleSettingsView();
-        break;
-      case 'new-note':
-        if (publishView.hidden) {
-          localStorage.removeItem('reply_to'); // should it forget old replyto context?
-          publishView.append(writeForm);
-          if (writeInput.value.trimRight()) {
-            writeInput.style.removeProperty('height');
-          }
-          requestAnimationFrame(() => {
-            updateElemHeight(writeInput);
-            writeInput.focus();
-          });
-          publishView.removeAttribute('hidden');
-        } else {
-          publishView.hidden = true;
-        }
-        break;
-      case 'back':
-        publishView.hidden = true;
-        break;
-    }
+      break;
+    case 'back':
+      publishView.hidden = true;
+      break;
   }
   // const container = e.target.closest('[data-append]');
   // if (container) {
@@ -595,6 +574,18 @@ document.body.addEventListener('click', (e) => {
   //   delete container.dataset.append;
   //   return;
   // }
+};
+
+document.body.addEventListener('click', (e) => {
+  const a = e.target.closest('a');
+  if (a) {
+    handleLink(e, a);
+    return;
+  }
+  const button = e.target.closest('button');
+  if (button) {
+    handleButton(e, button);
+  }
 });
 
 // document.body.addEventListener('keyup', (e) => {
