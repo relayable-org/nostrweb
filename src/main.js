@@ -1,4 +1,4 @@
-import {nip19, signEvent} from 'nostr-tools';
+import {nip19} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
 import {elem, elemCanvas, elemShrink, parseTextContent, updateElemHeight} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
@@ -9,6 +9,7 @@ import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
 import {closeSettingsView, config, toggleSettingsView} from './settings';
+import {getReactions, getReactionContents, handleReaction, handleUpvote} from './reactions';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -117,42 +118,6 @@ function renderReply(evt, relay) {
   setViewElem(evt.id, reply);
 }
 
-const reactionMap = {};
-
-const getReactionList = (id) => {
-  return reactionMap[id]?.map(({content}) => content) || [];
-};
-
-function handleReaction(evt, relay) {
-  // last id is the note that is being reacted to https://github.com/nostr-protocol/nips/blob/master/25.md
-  const lastEventTag = evt.tags.filter(hasEventTag).at(-1);
-  if (!lastEventTag || !evt.content.length) {
-    // ignore reactions with no content
-    return;
-  }
-  const [, eventId] = lastEventTag;
-  if (reactionMap[eventId]) {
-    if (reactionMap[eventId].find(reaction => reaction.id === evt.id)) {
-      // already received this reaction from a different relay
-      return;
-    }
-    reactionMap[eventId] = [evt, ...(reactionMap[eventId])];
-  } else {
-    reactionMap[eventId] = [evt];
-  }
-  const article = getViewElem(eventId);
-  if (article) {
-    const button = article.querySelector('button[name="star"]');
-    const reactions = button.querySelector('[data-reactions]');
-    reactions.textContent = reactionMap[eventId].length;
-    if (evt.pubkey === config.pubkey) {
-      const star = button.querySelector('img[src*="star"]');
-      star?.setAttribute('src', '/assets/star-fill.svg');
-      star?.setAttribute('title', getReactionList(eventId).join(' '));
-    }
-  }
-}
-
 const restoredReplyTo = localStorage.getItem('reply_to');
 
 config.rerenderFeed = () => {
@@ -232,8 +197,8 @@ function createTextNote(evt, relay) {
   const replies = replyList.filter(({replyTo}) => replyTo === evt.id);
   // const isLongContent = evt.content.trimRight().length > 280;
   // const content = isLongContent ? evt.content.slice(0, 280) : evt.content;
-  const hasReactions = reactionMap[evt.id]?.length > 0;
-  const didReact = hasReactions && !!reactionMap[evt.id].find(reaction => reaction.pubkey === config.pubkey);
+  const reactions = getReactions(evt.id);
+  const didReact = reactions.length && !!reactions.find(reaction => reaction.pubkey === config.pubkey);
   const replyFeed = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
   const [content, {firstLink}] = parseTextContent(evt.content);
   const body = elem('div', {className: 'mbox-body'}, [
@@ -260,9 +225,9 @@ function createTextNote(evt, relay) {
           alt: didReact ? '✭' : '✩', // ♥
           height: 24, width: 24,
           src: `/assets/${didReact ? 'star-fill' : 'star'}.svg`,
-          title: getReactionList(evt.id).join(' '),
+          title: getReactionContents(evt.id).join(' '),
         }),
-        elem('small', {data: {reactions: ''}}, hasReactions ? reactionMap[evt.id].length : ''),
+        elem('small', {data: {reactions: ''}}, reactions.length || ''),
       ]),
     ]),
   ]);
@@ -456,49 +421,6 @@ function appendReplyForm(el) {
   requestAnimationFrame(() => writeInput.focus());
 }
 
-async function upvote(eventId, eventPubkey) {
-  const note = replyList.find(r => r.id === eventId) || textNoteList.find(n => n.id === (eventId));
-  const tags = [
-    ...note.tags
-      .filter(tag => ['e', 'p'].includes(tag[0])) // take e and p tags from event
-      .map(([a, b]) => [a, b]), // drop optional (nip-10) relay and marker fields
-    ['e', eventId], ['p', eventPubkey], // last e and p tag is the id and pubkey of the note being reacted to (nip-25)
-  ];
-  const article = getViewElem(eventId);
-  const reactionBtn = article.querySelector('[name="star"]');
-  const statusElem = article.querySelector('[data-reactions]');
-  reactionBtn.disabled = true;
-  const newReaction = await powEvent({
-    kind: 7,
-    pubkey: config.pubkey, // TODO: lib could check that this is the pubkey of the key to sign with
-    content: '+',
-    tags,
-    created_at: Math.floor(Date.now() * 0.001),
-  }, {
-    difficulty: config.difficulty,
-    statusElem,
-    timeout: config.timeout,
-  }).catch(console.warn);
-  if (!newReaction) {
-    statusElem.textContent = reactionMap[eventId]?.length;
-    reactionBtn.disabled = false;
-    return;
-  }
-  const privatekey = localStorage.getItem('private_key');
-  const sig = signEvent(newReaction, privatekey);
-  // TODO: validateEvent
-  if (sig) {
-    statusElem.textContent = 'publishing…';
-    publish({...newReaction, sig}, (relay, error) => {
-      if (error) {
-        return console.error(error, relay);
-      }
-      console.info(`event published by ${relay}`);
-    });
-    reactionBtn.disabled = false;
-  }
-}
-
 // send
 const sendStatus = document.querySelector('#sendstatus');
 const onSendError = err => sendStatus.textContent = err.message;
@@ -640,7 +562,8 @@ document.body.addEventListener('click', (e) => {
         localStorage.setItem('reply_to', id);
         break;
       case 'star':
-        upvote(id, pubkey);
+        const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
+        handleUpvote(note);
         break;
       case 'settings':
         toggleSettingsView();
