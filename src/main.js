@@ -3,12 +3,12 @@ import {zeroLeadingBitsCount} from './utils/crypto';
 import {elem, elemCanvas, elemShrink, parseTextContent} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
 import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
+import {powEvent} from './system';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
 import {config} from './settings';
-import {powEvent} from './system';
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -49,7 +49,7 @@ const renderNote = (evt, i, sortedFeeds) => {
 };
 
 const hasEnoughPOW = ([tag, , commitment], eventId) => {
-  return tag === 'nonce' && commitment >= fitlerDifficulty && zeroLeadingBitsCount(eventId) >= fitlerDifficulty;
+  return tag === 'nonce' && commitment >= config.filterDifficulty && zeroLeadingBitsCount(eventId) >= config.filterDifficulty;
 };
 
 const renderFeed = bounce(() => {
@@ -58,7 +58,7 @@ const renderFeed = bounce(() => {
     // dont render notes from the future
     .filter(note => note.created_at <= now)
     // if difficulty filter is configured dont render notes with too little pow
-    .filter(note => !fitlerDifficulty || note.tags.some(tag => hasEnoughPOW(tag, note.id)))
+    .filter(note => !config.filterDifficulty || note.tags.some(tag => hasEnoughPOW(tag, note.id)))
     .sort(sortByCreatedAt)
     .reverse()
     .forEach(renderNote);
@@ -155,10 +155,10 @@ function handleReaction(evt, relay) {
 
 const restoredReplyTo = localStorage.getItem('reply_to');
 
-function rerenderFeed() {
+config.rerenderFeed = () => {
   clearView();
   renderFeed();
-}
+};
 
 setInterval(() => {
   document.querySelectorAll('time[datetime]').forEach(timeElem => {
@@ -285,7 +285,7 @@ function handleRecommendServer(evt, relay) {
     getViewContent().append(art);
   } else {
     const closestTextNotes = textNoteList
-      .filter(note => !fitlerDifficulty || note.tags.some(([tag, , commitment]) => tag === 'nonce' && commitment >= fitlerDifficulty))
+      .filter(note => !config.filterDifficulty || note.tags.some(([tag, , commitment]) => tag === 'nonce' && commitment >= config.filterDifficulty)) // TODO: prob change to hasEnoughPOW
       .sort(sortEventCreatedAt(evt.created_at));
     getViewElem(closestTextNotes[0].id)?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
   }
@@ -456,35 +456,6 @@ function appendReplyForm(el) {
   requestAnimationFrame(() => writeInput.focus());
 }
 
-let fitlerDifficulty = JSON.parse(localStorage.getItem('filter_difficulty')) ?? 0;
-const filterDifficultyInput = document.querySelector('#filterDifficulty');
-const filterDifficultyDisplay = document.querySelector('[data-display="filter_difficulty"]');
-filterDifficultyInput.addEventListener('input', (e) => {
-  localStorage.setItem('filter_difficulty', filterDifficultyInput.valueAsNumber);
-  fitlerDifficulty = filterDifficultyInput.valueAsNumber;
-  filterDifficultyDisplay.textContent = filterDifficultyInput.value;
-  rerenderFeed();
-});
-filterDifficultyInput.value = fitlerDifficulty;
-filterDifficultyDisplay.textContent = filterDifficultyInput.value;
-
-// arbitrary difficulty default, still experimenting.
-let difficulty = JSON.parse(localStorage.getItem('mining_target')) ?? 16;
-const miningTargetInput = document.querySelector('#miningTarget');
-miningTargetInput.addEventListener('input', (e) => {
-  localStorage.setItem('mining_target', miningTargetInput.valueAsNumber);
-  difficulty = miningTargetInput.valueAsNumber;
-});
-miningTargetInput.value = difficulty;
-
-let timeout = JSON.parse(localStorage.getItem('mining_timeout')) ?? 5;
-const miningTimeoutInput = document.querySelector('#miningTimeout');
-miningTimeoutInput.addEventListener('input', (e) => {
-  localStorage.setItem('mining_timeout', miningTimeoutInput.valueAsNumber);
-  timeout = miningTimeoutInput.valueAsNumber;
-});
-miningTimeoutInput.value = timeout;
-
 async function upvote(eventId, eventPubkey) {
   const note = replyList.find(r => r.id === eventId) || textNoteList.find(n => n.id === (eventId));
   const tags = [
@@ -503,7 +474,11 @@ async function upvote(eventId, eventPubkey) {
     content: '+',
     tags,
     created_at: Math.floor(Date.now() * 0.001),
-  }, {difficulty, statusElem, timeout}).catch(console.warn);
+  }, {
+    difficulty: config.difficulty,
+    statusElem,
+    timeout: config.timeout,
+  }).catch(console.warn);
   if (!newReaction) {
     statusElem.textContent = reactionMap[eventId]?.length;
     reactionBtn.disabled = false;
@@ -557,7 +532,11 @@ writeForm.addEventListener('submit', async (e) => {
     pubkey: config.pubkey,
     tags,
     created_at: Math.floor(Date.now() * 0.001),
-  }, {difficulty, statusElem: sendStatus, timeout}).catch(console.warn);
+  }, {
+    difficulty: config.difficulty,
+    statusElem: sendStatus,
+    timeout: config.timeout,
+  }).catch(console.warn);
   if (!newEvent) {
     close();
     return;
@@ -815,7 +794,11 @@ profileForm.addEventListener('submit', async (e) => {
     content: JSON.stringify(Object.fromEntries(form)),
     tags: [],
     created_at: Math.floor(Date.now() * 0.001),
-  }, {difficulty, statusElem: profileStatus, timeout}).catch(console.warn);
+  }, {
+    difficulty: config.difficulty,
+    statusElem: profileStatus,
+    timeout: config.timeout,
+  }).catch(console.warn);
   if (!newProfile) {
     profileStatus.textContent = 'publishing profile data canceled';
     profileStatus.hidden = false;
