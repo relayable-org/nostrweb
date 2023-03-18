@@ -1,15 +1,15 @@
 import {nip19} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
-import {elem, elemCanvas, elemShrink, parseTextContent, updateElemHeight} from './utils/dom';
+import {elem, elemCanvas, parseTextContent} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
 import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
-import {powEvent} from './system';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
-import {publish} from './relays';
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
 import {closeSettingsView, config, toggleSettingsView} from './settings';
 import {getReactions, getReactionContents, handleReaction, handleUpvote} from './reactions';
+import {closePublishView, openWriteInput, togglePublishView} from './write';
+
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
 function onEvent(evt, relay) {
@@ -118,8 +118,6 @@ function renderReply(evt, relay) {
   setViewElem(evt.id, reply);
 }
 
-const restoredReplyTo = localStorage.getItem('reply_to');
-
 config.rerenderFeed = () => {
   clearView();
   renderFeed();
@@ -190,8 +188,6 @@ function linkPreview(href, id, relay) {
   });
 }
 
-const writeInput = document.querySelector('textarea[name="message"]');
-
 function createTextNote(evt, relay) {
   const {host, img, name, time, userName} = getMetadata(evt, relay);
   const replies = replyList.filter(({replyTo}) => replyTo === evt.id);
@@ -201,6 +197,20 @@ function createTextNote(evt, relay) {
   const didReact = reactions.length && !!reactions.find(reaction => reaction.pubkey === config.pubkey);
   const replyFeed = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
   const [content, {firstLink}] = parseTextContent(evt.content);
+  const buttons = elem('div', {className: 'buttons'}, [
+    elem('button', {name: 'reply', type: 'button'}, [
+      elem('img', {height: 24, width: 24, src: '/assets/comment.svg'})
+    ]),
+    elem('button', {name: 'star', type: 'button'}, [
+      elem('img', {
+        alt: didReact ? '✭' : '✩', // ♥
+        height: 24, width: 24,
+        src: `/assets/${didReact ? 'star-fill' : 'star'}.svg`,
+        title: getReactionContents(evt.id).join(' '),
+      }),
+      elem('small', {data: {reactions: ''}}, reactions.length || ''),
+    ]),
+  ]);
   const body = elem('div', {className: 'mbox-body'}, [
     elem('header', {
       className: 'mbox-header',
@@ -216,24 +226,10 @@ function createTextNote(evt, relay) {
       ...content,
       (firstLink && validatePow(evt)) ? linkPreview(firstLink, evt.id, relay) : '',
     ]),
-    elem('div', {className: 'buttons'}, [
-      elem('button', {name: 'reply', type: 'button'}, [
-        elem('img', {height: 24, width: 24, src: '/assets/comment.svg'})
-      ]),
-      elem('button', {name: 'star', type: 'button'}, [
-        elem('img', {
-          alt: didReact ? '✭' : '✩', // ♥
-          height: 24, width: 24,
-          src: `/assets/${didReact ? 'star-fill' : 'star'}.svg`,
-          title: getReactionContents(evt.id).join(' '),
-        }),
-        elem('small', {data: {reactions: ''}}, reactions.length || ''),
-      ]),
-    ]),
+    buttons,
   ]);
-  if (restoredReplyTo === evt.id) {
-    appendReplyForm(body.querySelector('.buttons'));
-    requestAnimationFrame(() => updateElemHeight(writeInput));
+  if (localStorage.getItem('reply_to') === evt.id) {
+    openWriteInput(buttons);
   }
   return renderArticle([
     elem('div', {className: 'mbox-img'}, [img]), body,
@@ -393,96 +389,6 @@ function getMetadata(evt, relay) {
   return {host, img, name, time, userName};
 }
 
-const writeForm = document.querySelector('#writeForm');
-
-writeInput.addEventListener('focusout', () => {
-  const reply_to = localStorage.getItem('reply_to');
-  if (reply_to && writeInput.value === '') {
-    writeInput.addEventListener('transitionend', (event) => {
-      if (!reply_to || reply_to === localStorage.getItem('reply_to') && !writeInput.style.height) { // should prob use some class or data-attr instead of relying on height
-        writeForm.after(elemShrink(writeInput));
-        writeForm.remove();
-        localStorage.removeItem('reply_to');
-      }
-    }, {once: true});
-  }
-});
-
-function appendReplyForm(el) {
-  writeForm.before(elemShrink(writeInput));
-  writeInput.blur();
-  writeInput.style.removeProperty('height');
-  el.after(writeForm);
-  if (writeInput.value && !writeInput.value.trimRight()) {
-    writeInput.value = '';
-  } else {
-    requestAnimationFrame(() => updateElemHeight(writeInput));
-  }
-  requestAnimationFrame(() => writeInput.focus());
-}
-
-// send
-const sendStatus = document.querySelector('#sendstatus');
-const onSendError = err => sendStatus.textContent = err.message;
-const publishBtn = document.querySelector('#publish');
-writeForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const privatekey = localStorage.getItem('private_key');
-  if (!config.pubkey || !privatekey) {
-    return onSendError(new Error('no pubkey/privatekey'));
-  }
-  const content = writeInput.value.trimRight();
-  if (!content) {
-    return onSendError(new Error('message is empty'));
-  }
-  const replyTo = localStorage.getItem('reply_to');
-  const close = () => {
-    sendStatus.textContent = '';
-    writeInput.value = '';
-    writeInput.style.removeProperty('height');
-    publishBtn.disabled = true;
-    if (replyTo) {
-      localStorage.removeItem('reply_to');
-      publishView.append(writeForm);
-    }
-    publishView.hidden = true;
-  };
-  const tags = replyTo ? [['e', replyTo]] : []; // , eventRelayMap[replyTo][0]
-  const newEvent = await powEvent({
-    kind: 1,
-    content,
-    pubkey: config.pubkey,
-    tags,
-    created_at: Math.floor(Date.now() * 0.001),
-  }, {
-    difficulty: config.difficulty,
-    statusElem: sendStatus,
-    timeout: config.timeout,
-  }).catch(console.warn);
-  if (!newEvent) {
-    close();
-    return;
-  }
-  const sig = signEvent(newEvent, privatekey);
-  // TODO validateEvent
-  if (sig) {
-    sendStatus.textContent = 'publishing…';
-    publish({...newEvent, sig}, (relay, error) => {
-      if (error) {
-        return console.log(error, relay);
-      }
-      console.info(`publish request sent to ${relay}`);
-      close();
-    });
-  }
-});
-
-writeInput.addEventListener('input', () => {
-  publishBtn.disabled = !writeInput.value.trimRight();
-  updateElemHeight(writeInput);
-});
-writeInput.addEventListener('blur', () => sendStatus.textContent = '');
-
 // subscribe and change view
 function route(path) {
   if (path === '/') {
@@ -514,15 +420,11 @@ window.addEventListener('popstate', (event) => {
   route(location.pathname);
 });
 
-const publishView = document.querySelector('#newNote');
-
 const handleLink = (e, a) => {
   if ('nav' in a.dataset) {
     e.preventDefault();
     closeSettingsView();
-    if (!publishView.hidden) {
-      publishView.hidden = true;
-    }
+    closePublishView();
     const href = a.getAttribute('href');
     route(href);
     history.pushState({}, null, href);
@@ -534,12 +436,7 @@ const handleButton = (e, button) => {
   const id = e.target.closest('[data-id]')?.dataset.id;
   switch(button.name) {
     case 'reply':
-      if (localStorage.getItem('reply_to') === id) {
-        writeInput.blur();
-        return;
-      }
-      appendReplyForm(button.closest('.buttons'));
-      localStorage.setItem('reply_to', id);
+      openWriteInput(button, id);
       break;
     case 'star':
       const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
@@ -549,23 +446,10 @@ const handleButton = (e, button) => {
       toggleSettingsView();
       break;
     case 'new-note':
-      if (publishView.hidden) {
-        localStorage.removeItem('reply_to'); // should it forget old replyto context?
-        publishView.append(writeForm);
-        if (writeInput.value.trimRight()) {
-          writeInput.style.removeProperty('height');
-        }
-        requestAnimationFrame(() => {
-          updateElemHeight(writeInput);
-          writeInput.focus();
-        });
-        publishView.removeAttribute('hidden');
-      } else {
-        publishView.hidden = true;
-      }
+      togglePublishView();
       break;
     case 'back':
-      publishView.hidden = true;
+      closePublishView();
       break;
   }
   // const container = e.target.closest('[data-append]');
@@ -587,9 +471,3 @@ document.body.addEventListener('click', (e) => {
     handleButton(e, button);
   }
 });
-
-// document.body.addEventListener('keyup', (e) => {
-//   if (e.key === 'Escape') {
-//     hideNewMessage(true);
-//   }
-// });
