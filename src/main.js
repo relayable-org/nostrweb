@@ -218,9 +218,9 @@ function createTextNote(evt, relay) {
       ${evt.tags.length ? `\nTags ${JSON.stringify(evt.tags)}\n` : ''}
       ${evt.content}`
     }, [
-      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.nip19.npub}`, data: {nav: true}}, name || userName),
+      elem('a', {className: `mbox-username${name ? ' mbox-kind0-name' : ''}`, href: `/${evt.nip19.npub}`}, name || userName),
       ' ',
-      elem('a', {href: `/${evt.nip19.note}`, data: {nav: true}}, formatTime(time)),
+      elem('a', {href: `/${evt.nip19.note}`}, elem('time', {dateTime: time.toISOString()}, formatTime(time))),
     ]),
     elem('div', {/* data: isLongContent ? {append: evt.content.slice(280)} : null*/}, [
       ...content,
@@ -421,11 +421,14 @@ window.addEventListener('popstate', (event) => {
 });
 
 const handleLink = (e, a) => {
-  if ('nav' in a.dataset) {
-    e.preventDefault();
+  const href = a.getAttribute('href');
+  if (
+    href === '/'
+    || href.startsWith('/note')
+    || href.startsWith('/npub')
+  ) {
     closeSettingsView();
     closePublishView();
-    const href = a.getAttribute('href');
     route(href);
     history.pushState({}, null, href);
     e.preventDefault();
