@@ -9,6 +9,7 @@ import {clearView, getViewContent, getViewElem, setViewElem, view} from './view'
 import {closeSettingsView, config, toggleSettingsView} from './settings';
 import {getReactions, getReactionContents, handleReaction, handleUpvote} from './reactions';
 import {closePublishView, openWriteInput, togglePublishView} from './write';
+import {linkPreview, parseContent} from './media';
 
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
@@ -129,64 +130,6 @@ setInterval(() => {
   });
 }, 10000);
 
-const fetchQue = [];
-let fetchPending;
-const fetchNext = (href, id, relay) => {
-  const noxy = getNoxyUrl('meta', href, id, relay);
-  const previewId = noxy.searchParams.toString();
-  if (fetchPending) {
-    fetchQue.push({href, id, relay});
-    return previewId;
-  }
-  fetchPending = fetch(noxy.href)
-    .then(data => {
-      if (data.status === 200) {
-        return data.json();
-      }
-      // fetchQue.push({href, id, relay}); // could try one more time
-      return Promise.reject(data);
-    })
-    .then(meta => {
-      const container = document.getElementById(previewId);
-      const content = [];
-      if (meta.images[0]) {
-        content.push(elem('img', {className: 'preview-image', loading: 'lazy', src: getNoxyUrl('data', meta.images[0], id, relay).href}));
-      }
-      if (meta.title) {
-        content.push(elem('h2', {className: 'preview-title'}, meta.title));
-      }
-      if (meta.descr) {
-        content.push(elem('p', {className: 'preview-descr'}, meta.descr))
-      }
-      if (content.length) {
-        container.append(elem('a', {href, rel: 'noopener noreferrer', target: '_blank'}, content));
-        container.classList.add('preview-loaded');
-      }
-    })
-    .finally(() => {
-      fetchPending = false;
-      if (fetchQue.length) {
-        const {href, id, relay} = fetchQue.shift();
-        return fetchNext(href, id, relay);
-      }
-    })
-    .catch(err => err.text && err.text())
-    .then(errMsg => errMsg && console.warn(errMsg));
-  return previewId;
-};
-
-function linkPreview(href, id, relay) {
-  if ((/\.(gif|jpe?g|png)$/i).test(href)) {
-    return elem('div', {},
-      [elem('img', {className: 'preview-image-only', loading: 'lazy', src: getNoxyUrl('data', href, id, relay).href})]
-    );
-  }
-  const previewId = fetchNext(href, id, relay);
-  return elem('div', {
-    className: 'preview',
-    id: previewId
-  });
-}
 
 function createTextNote(evt, relay) {
   const {host, img, name, time, userName} = getMetadata(evt, relay);
@@ -312,15 +255,6 @@ function renderArticle(content, props = {}) {
 
 const userList = [];
 // const tempContactList = {};
-
-function parseContent(content) {
-  try {
-    return JSON.parse(content);
-  } catch(err) {
-    console.log(evt);
-    console.error(err);
-  }
-}
 
 function handleMetadata(evt, relay) {
   const content = parseContent(evt.content);
