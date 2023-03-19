@@ -20,7 +20,7 @@ main {
 }
 
 aside {
-  order: 2;
+  z-index: 2;
 }
 
 nav {
