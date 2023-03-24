@@ -1,6 +1,6 @@
-import {nip19} from 'nostr-tools';
+import {Event, nip19} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
-import {elem, parseTextContent} from './utils/dom';
+import {elem, elemArticle, parseTextContent} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
 import {isWssUrl} from './utils/url';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
@@ -14,7 +14,7 @@ import {getMetadata, handleMetadata} from './profiles';
 
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
-function onEvent(evt, relay) {
+function onEvent(evt: Event, relay: string) {
   switch (evt.kind) {
     case 0:
       handleMetadata(evt, relay);
@@ -35,14 +35,28 @@ function onEvent(evt, relay) {
   }
 }
 
-const textNoteList = []; // could use indexDB
-const eventRelayMap = {}; // eventId: [relay1, relay2]
+type EventWithNip19 = Event & {
+  nip19: {
+    note: string;
+    npub: string;
+  }
+};
+const textNoteList: Array<EventWithNip19> = []; // could use indexDB
 
-const renderNote = (evt, i, sortedFeeds) => {
+type EventRelayMap = {
+  [eventId: string]: string[];
+};
+const eventRelayMap: EventRelayMap = {}; // eventId: [relay1, relay2]
+
+const renderNote = (
+  evt: EventWithNip19,
+  i: number,
+  sortedFeeds: EventWithNip19[],
+) => {
   if (getViewElem(evt.id)) { // note already in view
     return;
   }
-  const article = createTextNote(evt, eventRelayMap[evt.id]);
+  const article = createTextNote(evt, eventRelayMap[evt.id][0]);
   if (i === 0) {
     getViewContent().append(article);
   } else {
@@ -51,8 +65,11 @@ const renderNote = (evt, i, sortedFeeds) => {
   setViewElem(evt.id, article);
 };
 
-const hasEnoughPOW = ([tag, , commitment], eventId) => {
-  return tag === 'nonce' && commitment >= config.filterDifficulty && zeroLeadingBitsCount(eventId) >= config.filterDifficulty;
+const hasEnoughPOW = (
+  [tag, , commitment]: string[],
+  eventId: string
+) => {
+  return tag === 'nonce' && Number(commitment) >= config.filterDifficulty && zeroLeadingBitsCount(eventId) >= config.filterDifficulty;
 };
 
 const renderFeed = bounce(() => {
@@ -67,9 +84,9 @@ const renderFeed = bounce(() => {
     .forEach(renderNote);
 }, 17); // (16.666 rounded, an arbitrary value to limit updates to max 60x per s)
 
-function handleTextNote(evt, relay) {
+function handleTextNote(evt: Event, relay: string) {
   if (eventRelayMap[evt.id]) {
-    eventRelayMap[evt.id] = [relay, ...(eventRelayMap[evt.id])];
+    eventRelayMap[evt.id] = [...(eventRelayMap[evt.id]), relay]; // TODO: just push?
   } else {
     eventRelayMap[evt.id] = [relay];
     const evtWithNip19 = {
@@ -90,9 +107,13 @@ function handleTextNote(evt, relay) {
   }
 }
 
-const replyList = [];
+type EventWithNip19AndReplyTo = EventWithNip19 & {
+  replyTo: string;
+}
 
-function handleReply(evt, relay) {
+const replyList: Array<EventWithNip19AndReplyTo> = [];
+
+function handleReply(evt: EventWithNip19, relay: string) {
   if (
     getViewElem(evt.id) // already rendered probably received from another relay
     || evt.tags.some(isMention) // ignore mentions for now
@@ -100,12 +121,16 @@ function handleReply(evt, relay) {
     return;
   }
   const replyTo = getReplyTo(evt);
+  if (!replyTo) {
+    console.warn('expected to find reply-to-event-id', evt);
+    return;
+  }
   const evtWithReplyTo = {replyTo, ...evt};
   replyList.push(evtWithReplyTo);
   renderReply(evtWithReplyTo, relay);
 }
 
-function renderReply(evt, relay) {
+function renderReply(evt: EventWithNip19AndReplyTo, relay: string) {
   const parent = getViewElem(evt.replyTo);
   if (!parent) { // root article has not been rendered
     return;
@@ -126,20 +151,20 @@ config.rerenderFeed = () => {
 };
 
 setInterval(() => {
-  document.querySelectorAll('time[datetime]').forEach(timeElem => {
+  document.querySelectorAll('time[datetime]').forEach((timeElem: HTMLTimeElement) => {
     timeElem.textContent = formatTime(new Date(timeElem.dateTime));
   });
 }, 10000);
 
 
-function createTextNote(evt, relay) {
+function createTextNote(evt: EventWithNip19, relay: string) {
   const {host, img, name, time, userName} = getMetadata(evt, relay);
   const replies = replyList.filter(({replyTo}) => replyTo === evt.id);
   // const isLongContent = evt.content.trimRight().length > 280;
   // const content = isLongContent ? evt.content.slice(0, 280) : evt.content;
   const reactions = getReactions(evt.id);
   const didReact = reactions.length && !!reactions.find(reaction => reaction.pubkey === config.pubkey);
-  const replyFeed = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
+  const replyFeed: Array<HTMLElement> = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
   const [content, {firstLink}] = parseTextContent(evt.content);
   const buttons = elem('div', {className: 'buttons'}, [
     elem('button', {name: 'reply', type: 'button'}, [
@@ -168,20 +193,21 @@ function createTextNote(evt, relay) {
     ]),
     elem('div', {/* data: isLongContent ? {append: evt.content.slice(280)} : null*/}, [
       ...content,
-      (firstLink && validatePow(evt)) ? linkPreview(firstLink, evt.id, relay) : '',
+      (firstLink && validatePow(evt)) ? linkPreview(firstLink, evt.id, relay) : null,
     ]),
     buttons,
   ]);
   if (localStorage.getItem('reply_to') === evt.id) {
-    openWriteInput(buttons);
+    openWriteInput(buttons, evt.id);
   }
-  return renderArticle([
-    elem('div', {className: 'mbox-img'}, [img]), body,
-    replies[0] ? elem('div', {className: 'mobx-replies'}, replyFeed.reverse()) : '',
+  return elemArticle([
+    elem('div', {className: 'mbox-img'}, img),
+    body,
+    ...(replies[0] ? [elem('div', {className: 'mobx-replies'}, replyFeed.reverse())] : []),
   ], {data: {id: evt.id, pubkey: evt.pubkey, relay}});
 }
 
-function handleRecommendServer(evt, relay) {
+function handleRecommendServer(evt: Event, relay: string) {
   if (getViewElem(evt.id) || !isWssUrl(evt.content)) {
     return;
   }
@@ -190,14 +216,15 @@ function handleRecommendServer(evt, relay) {
     getViewContent().append(art);
   } else {
     const closestTextNotes = textNoteList
-      .filter(note => !config.filterDifficulty || note.tags.some(([tag, , commitment]) => tag === 'nonce' && commitment >= config.filterDifficulty)) // TODO: prob change to hasEnoughPOW
+      // TODO: prob change to hasEnoughPOW
+      .filter(note => !config.filterDifficulty || note.tags.some(([tag, , commitment]) => tag === 'nonce' && Number(commitment) >= config.filterDifficulty))
       .sort(sortEventCreatedAt(evt.created_at));
     getViewElem(closestTextNotes[0].id)?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
   }
   setViewElem(evt.id, art);
 }
 
-function renderRecommendServer(evt, relay) {
+function renderRecommendServer(evt: Event, relay: string) {
   const {img, name, time, userName} = getMetadata(evt, relay);
   const body = elem('div', {className: 'mbox-body', title: dateTime.format(time)}, [
     elem('header', {className: 'mbox-header'}, [
@@ -207,23 +234,22 @@ function renderRecommendServer(evt, relay) {
     ]),
     ` recommends server: ${evt.content}`,
   ]);
-  return renderArticle([
+  return elemArticle([
     elem('div', {className: 'mbox-img'}, [img]), body
   ], {className: 'mbox-recommend-server', data: {id: evt.id, pubkey: evt.pubkey}});
 }
 
-function renderArticle(content, props = {}) {
-  const className = props.className ? ['mbox', props?.className].join(' ') : 'mbox';
-  return elem('article', {...props, className}, content);
-}
-
 // subscribe and change view
-function route(path) {
+function route(path: string) {
   if (path === '/') {
     sub24hFeed(onEvent);
     view('/');
   } else if (path.length === 64 && path.match(/^\/[0-9a-z]+$/)) {
     const {type, data} = nip19.decode(path.slice(1));
+    if (typeof data !== 'string') {
+      console.warn('nip19 ProfilePointer, EventPointer and AddressPointer are not yet supported');
+      return;
+    }
     switch(type) {
       case 'note':
         subNote(data, onEvent);
@@ -248,8 +274,12 @@ window.addEventListener('popstate', (event) => {
   route(location.pathname);
 });
 
-const handleLink = (e, a) => {
+const handleLink = (a: HTMLAnchorElement, e: MouseEvent) => {
   const href = a.getAttribute('href');
+  if (typeof href !== 'string') {
+    console.warn('expected anchor to have href attribute', a);
+    return;
+  }
   if (
     href === '/'
     || href.startsWith('/note')
@@ -258,20 +288,23 @@ const handleLink = (e, a) => {
     closeSettingsView();
     closePublishView();
     route(href);
-    history.pushState({}, null, href);
+    history.pushState({}, '', href);
     e.preventDefault();
   }
 };
 
-const handleButton = (e, button) => {
-  const id = e.target.closest('[data-id]')?.dataset.id;
+const handleButton = (button: HTMLButtonElement) => {
+  const id = (button.closest('[data-id]') as HTMLElement)?.dataset.id;
+  if (!id) {
+    return;
+  }
   switch(button.name) {
     case 'reply':
       openWriteInput(button, id);
       break;
     case 'star':
       const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
-      handleUpvote(note);
+      note && handleUpvote(note);
       break;
     case 'settings':
       toggleSettingsView();
@@ -291,14 +324,16 @@ const handleButton = (e, button) => {
   // }
 };
 
-document.body.addEventListener('click', (e) => {
-  const a = e.target.closest('a');
-  if (a) {
-    handleLink(e, a);
-    return;
-  }
-  const button = e.target.closest('button');
-  if (button) {
-    handleButton(e, button);
+document.body.addEventListener('click', (event: MouseEvent) => {
+  if (event.target instanceof HTMLElement) {
+    const a = event.target?.closest('a');
+    if (a) {
+      handleLink(a, event);
+      return;
+    }
+    const button = event.target.closest('button');
+    if (button) {
+      handleButton(button);
+    }
   }
 });

@@ -1,12 +1,17 @@
+import {isNotNull} from './array';
 import {isValidURL} from './url';
 
 type DataAttributes = {
   data: {
     [key: string]: string | number;
-  }
+  },
+} & {
+  dataset: never, // the dataset property itself is readonly
 };
 
 type Attributes<Type> = Partial<Type & DataAttributes>;
+
+type Children = Array<HTMLElement | string | null> | HTMLElement | string | number | null;
 
 /**
  * example usage:
@@ -23,7 +28,7 @@ type Attributes<Type> = Partial<Type & DataAttributes>;
 export const elem = <Name extends keyof HTMLElementTagNameMap>(
   name: Extract<Name, keyof HTMLElementTagNameMap>,
   attrs?: Attributes<HTMLElementTagNameMap[Name]>,
-  children?: Array<HTMLElement | string> | string | number,
+  children?: Children,
 ): HTMLElementTagNameMap[Name] => {
   const el = document.createElement(name);
   if (attrs) {
@@ -37,7 +42,7 @@ export const elem = <Name extends keyof HTMLElementTagNameMap>(
   }
   if (children != null) {
     if (Array.isArray(children)) {
-      el.append(...children);
+      el.append(...children.filter(isNotNull));
     } else {
       switch (typeof children) {
         case 'number':
@@ -175,4 +180,12 @@ export const updateElemHeight = (
     el.style.removeProperty('padding-bottom');
     el.style.removeProperty('padding-top');
   }
+};
+
+export const elemArticle = (
+  content: Array<HTMLElement>,
+  attrs: Attributes<HTMLElementTagNameMap['div']> = {}
+) => {
+  const className = attrs.className ? ['mbox', attrs?.className].join(' ') : 'mbox';
+  return elem('article', {...attrs, className}, content);
 };

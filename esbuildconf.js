@@ -18,7 +18,7 @@ export const options = {
     'src/favicon.ico',
     'src/index.html',
     'src/styles/main.css',
-    'src/main.js',
+    'src/main.ts',
     'src/manifest.json',
     'src/worker.js',
   ],
