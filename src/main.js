@@ -1,15 +1,16 @@
 import {nip19} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
-import {elem, elemCanvas, parseTextContent} from './utils/dom';
+import {elem, parseTextContent} from './utils/dom';
 import {bounce, dateTime, formatTime} from './utils/time';
-import {getHost, getNoxyUrl, isWssUrl} from './utils/url';
+import {isWssUrl} from './utils/url';
 import {sub24hFeed, subNote, subProfile} from './subscriptions'
 import {getReplyTo, hasEventTag, isMention, sortByCreatedAt, sortEventCreatedAt, validatePow} from './events';
 import {clearView, getViewContent, getViewElem, setViewElem, view} from './view';
 import {closeSettingsView, config, toggleSettingsView} from './settings';
 import {getReactions, getReactionContents, handleReaction, handleUpvote} from './reactions';
 import {closePublishView, openWriteInput, togglePublishView} from './write';
-import {linkPreview, parseContent} from './media';
+import {linkPreview} from './media';
+import {getMetadata, handleMetadata} from './profiles';
 
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
@@ -196,43 +197,6 @@ function handleRecommendServer(evt, relay) {
   setViewElem(evt.id, art);
 }
 
-function handleContactList(evt, relay) {
-  if (getViewElem(evt.id)) {
-    return;
-  }
-  const art = renderUpdateContact(evt, relay);
-  if (textNoteList.length < 2) {
-    getViewContent().append(art);
-    return;
-  }
-  const closestTextNotes = textNoteList.sort(sortEventCreatedAt(evt.created_at));
-  getViewElem(closestTextNotes[0].id).after(art);
-  setViewElem(evt.id, art);
-  // const user = userList.find(u => u.pupkey === evt.pubkey);
-  // if (user) {
-  //   console.log(`TODO: add contact list for ${evt.pubkey.slice(0, 8)} on ${relay}`, evt.tags);
-  // } else {
-  //   tempContactList[relay] = tempContactList[relay]
-  //     ? [...tempContactList[relay], evt]
-  //     : [evt];
-  // }
-}
-
-function renderUpdateContact(evt, relay) {
-  const {img, time, userName} = getMetadata(evt, relay);
-  const body = elem('div', {className: 'mbox-body', title: dateTime.format(time)}, [
-    elem('header', {className: 'mbox-header'}, [
-      elem('small', {}, []),
-    ]),
-    elem('pre', {title: JSON.stringify(evt.content)}, [
-      elem('strong', {}, userName),
-      ' updated contacts: ',
-      JSON.stringify(evt.tags),
-    ]),
-  ]);
-  return renderArticle([img, body], {className: 'mbox-updated-contact', data: {id: evt.id, pubkey: evt.pubkey, relay}});
-}
-
 function renderRecommendServer(evt, relay) {
   const {img, name, time, userName} = getMetadata(evt, relay);
   const body = elem('div', {className: 'mbox-body', title: dateTime.format(time)}, [
@@ -251,76 +215,6 @@ function renderRecommendServer(evt, relay) {
 function renderArticle(content, props = {}) {
   const className = props.className ? ['mbox', props?.className].join(' ') : 'mbox';
   return elem('article', {...props, className}, content);
-}
-
-const userList = [];
-// const tempContactList = {};
-
-function handleMetadata(evt, relay) {
-  const content = parseContent(evt.content);
-  if (content) {
-    setMetadata(evt, relay, content);
-  }
-}
-
-function setMetadata(evt, relay, content) {
-  let user = userList.find(u => u.pubkey === evt.pubkey);
-  const picture = getNoxyUrl('data', content.picture, evt.id, relay).href;
-  if (!user) {
-    user = {
-      metadata: {[relay]: content},
-      ...(content.picture && {picture}),
-      pubkey: evt.pubkey,
-    };
-    userList.push(user);
-  } else {
-    user.metadata[relay] = {
-      ...user.metadata[relay],
-      timestamp: evt.created_at,
-      ...content,
-    };
-    // use only the first profile pic (for now), different pics on each releay are not supported yet
-    if (!user.picture) {
-      user.picture = picture;
-    }
-  }
-  // update profile images
-  if (user.picture && validatePow(evt)) {
-    document.body
-      .querySelectorAll(`canvas[data-pubkey="${evt.pubkey}"]`)
-      .forEach(canvas => (canvas.parentNode.replaceChild(elem('img', {src: user.picture}), canvas)));
-  }
-  if (user.metadata[relay].name) {
-    document.body
-      .querySelectorAll(`[data-id="${evt.pubkey}"] .mbox-username:not(.mbox-kind0-name)`)
-      .forEach(username => {
-        username.textContent = user.metadata[relay].name;
-        username.classList.add('mbox-kind0-name');
-      });
-  }
-  // if (tempContactList[relay]) {
-  //   const updates = tempContactList[relay].filter(update => update.pubkey === evt.pubkey);
-  //   if (updates) {
-  //     console.log('TODO: add contact list (kind 3)', updates);
-  //   }
-  // }
-}
-
-function getMetadata(evt, relay) {
-  const host = getHost(relay);
-  const user = userList.find(user => user.pubkey === evt.pubkey);
-  const userImg = user?.picture;
-  const name = user?.metadata[relay]?.name;
-  const userName = name || evt.pubkey.slice(0, 8);
-  const userAbout = user?.metadata[relay]?.about || '';
-  const img = (userImg && validatePow(evt)) ? elem('img', {
-    alt: `${userName} ${host}`,
-    loading: 'lazy',
-    src: userImg,
-    title: `${userName} on ${host} ${userAbout}`,
-  }) : elemCanvas(evt.pubkey);
-  const time = new Date(evt.created_at * 1000);
-  return {host, img, name, time, userName};
 }
 
 // subscribe and change view

@@ -1,7 +1,7 @@
 import { elem } from './utils/dom';
 import { getNoxyUrl } from './utils/url';
 
-export const parseContent = (content: string) => {
+export const parseContent = (content: string): unknown => {
   try {
     return JSON.parse(content);
   } catch(err) {
