@@ -294,27 +294,28 @@ const handleLink = (a: HTMLAnchorElement, e: MouseEvent) => {
 };
 
 const handleButton = (button: HTMLButtonElement) => {
-  const id = (button.closest('[data-id]') as HTMLElement)?.dataset.id;
-  if (!id) {
-    return;
-  }
   switch(button.name) {
-    case 'reply':
-      openWriteInput(button, id);
-      break;
-    case 'star':
-      const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
-      note && handleUpvote(note);
-      break;
     case 'settings':
       toggleSettingsView();
-      break;
+      return;
     case 'new-note':
       togglePublishView();
-      break;
+      return;
     case 'back':
       closePublishView();
-      break;
+      return;
+  }
+  const id = (button.closest('[data-id]') as HTMLElement)?.dataset.id;
+  if (id) {
+    switch(button.name) {
+      case 'reply':
+        openWriteInput(button, id);
+        break;
+      case 'star':
+          const note = replyList.find(r => r.id === id) || textNoteList.find(n => n.id === (id));
+          note && handleUpvote(note);
+        break;
+    }
   }
   // const container = e.target.closest('[data-append]');
   // if (container) {
@@ -325,15 +326,14 @@ const handleButton = (button: HTMLButtonElement) => {
 };
 
 document.body.addEventListener('click', (event: MouseEvent) => {
-  if (event.target instanceof HTMLElement) {
-    const a = event.target?.closest('a');
-    if (a) {
-      handleLink(a, event);
-      return;
-    }
-    const button = event.target.closest('button');
-    if (button) {
-      handleButton(button);
-    }
+  const target = event.target as HTMLElement;
+  const a = target?.closest('a');
+  if (a) {
+    handleLink(a, event);
+    return;
+  }
+  const button = target?.closest('button');
+  if (button) {
+    handleButton(button);
   }
 });
