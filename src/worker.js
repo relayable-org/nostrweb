@@ -1,7 +1,7 @@
 import {getEventHash} from 'nostr-tools';
 import {zeroLeadingBitsCount} from './utils/crypto';
 
-function mine(event, difficulty, timeout = 5) {
+const mine = (event, difficulty, timeout = 5) => {
   const max = 256; // arbitrary
   if (!Number.isInteger(difficulty) || difficulty < 0 || difficulty > max) {
     throw new Error(`difficulty must be an integer between 0 and ${max}`);
@@ -29,9 +29,9 @@ function mine(event, difficulty, timeout = 5) {
       return {id, ...event};
     }
   }
-}
+};
 
-addEventListener('message', async (msg) => {
+addEventListener('message', (msg) => {
   const {difficulty, event, timeout} = msg.data;
   try {
     const minedEvent = mine(event, difficulty, timeout);

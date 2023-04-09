@@ -62,11 +62,6 @@
 .mbox-header a {
   font-size: var(--font-small);
 }
-.mbox-header time,
-.mbox-username {
-  color: var(--color-accent);
-  cursor: pointer;
-}
 
 .mbox-kind0-name {
   color: var(--color);

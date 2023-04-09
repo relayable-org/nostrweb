@@ -14,27 +14,6 @@ import {getMetadata, handleMetadata} from './profiles';
 
 // curl -H 'accept: application/nostr+json' https://relay.nostr.ch/
 
-function onEvent(evt: Event, relay: string) {
-  switch (evt.kind) {
-    case 0:
-      handleMetadata(evt, relay);
-      break;
-    case 1:
-      handleTextNote(evt, relay);
-      break;
-    case 2:
-      handleRecommendServer(evt, relay);
-      break;
-    case 3:
-      // handleContactList(evt, relay);
-      break;
-    case 7:
-      handleReaction(evt, relay);
-    default:
-      // console.log(`TODO: add support for event kind ${evt.kind}`/*, evt*/)
-  }
-}
-
 type EventWithNip19 = Event & {
   nip19: {
     note: string;
@@ -48,116 +27,13 @@ type EventRelayMap = {
 };
 const eventRelayMap: EventRelayMap = {}; // eventId: [relay1, relay2]
 
-const renderNote = (
-  evt: EventWithNip19,
-  i: number,
-  sortedFeeds: EventWithNip19[],
-) => {
-  if (getViewElem(evt.id)) { // note already in view
-    return;
-  }
-  const article = createTextNote(evt, eventRelayMap[evt.id][0]);
-  if (i === 0) {
-    getViewContent().append(article);
-  } else {
-    getViewElem(sortedFeeds[i - 1].id).before(article);
-  }
-  setViewElem(evt.id, article);
-};
-
-const hasEnoughPOW = (
-  [tag, , commitment]: string[],
-  eventId: string
-) => {
-  return tag === 'nonce' && Number(commitment) >= config.filterDifficulty && zeroLeadingBitsCount(eventId) >= config.filterDifficulty;
-};
-
-const renderFeed = bounce(() => {
-  const now = Math.floor(Date.now() * 0.001);
-  textNoteList
-    // dont render notes from the future
-    .filter(note => note.created_at <= now)
-    // if difficulty filter is configured dont render notes with too little pow
-    .filter(note => !config.filterDifficulty || note.tags.some(tag => hasEnoughPOW(tag, note.id)))
-    .sort(sortByCreatedAt)
-    .reverse()
-    .forEach(renderNote);
-}, 17); // (16.666 rounded, an arbitrary value to limit updates to max 60x per s)
-
-function handleTextNote(evt: Event, relay: string) {
-  if (eventRelayMap[evt.id]) {
-    eventRelayMap[evt.id] = [...(eventRelayMap[evt.id]), relay]; // TODO: just push?
-  } else {
-    eventRelayMap[evt.id] = [relay];
-    const evtWithNip19 = {
-      nip19: {
-        note: nip19.noteEncode(evt.id),
-        npub: nip19.npubEncode(evt.pubkey),
-      },
-      ...evt
-    };
-    if (evt.tags.some(hasEventTag)) {
-      handleReply(evtWithNip19, relay);
-    } else {
-      textNoteList.push(evtWithNip19);
-    }
-  }
-  if (!getViewElem(evt.id)) {
-    renderFeed();
-  }
-}
-
 type EventWithNip19AndReplyTo = EventWithNip19 & {
   replyTo: string;
-}
+};
 
 const replyList: Array<EventWithNip19AndReplyTo> = [];
 
-function handleReply(evt: EventWithNip19, relay: string) {
-  if (
-    getViewElem(evt.id) // already rendered probably received from another relay
-    || evt.tags.some(isMention) // ignore mentions for now
-  ) {
-    return;
-  }
-  const replyTo = getReplyTo(evt);
-  if (!replyTo) {
-    console.warn('expected to find reply-to-event-id', evt);
-    return;
-  }
-  const evtWithReplyTo = {replyTo, ...evt};
-  replyList.push(evtWithReplyTo);
-  renderReply(evtWithReplyTo, relay);
-}
-
-function renderReply(evt: EventWithNip19AndReplyTo, relay: string) {
-  const parent = getViewElem(evt.replyTo);
-  if (!parent) { // root article has not been rendered
-    return;
-  }
-  let replyContainer = parent.querySelector('.mobx-replies');
-  if (!replyContainer) {
-    replyContainer = elem('div', {className: 'mobx-replies'});
-    parent.append(replyContainer);
-  }
-  const reply = createTextNote(evt, relay);
-  replyContainer.append(reply);
-  setViewElem(evt.id, reply);
-}
-
-config.rerenderFeed = () => {
-  clearView();
-  renderFeed();
-};
-
-setInterval(() => {
-  document.querySelectorAll('time[datetime]').forEach((timeElem: HTMLTimeElement) => {
-    timeElem.textContent = formatTime(new Date(timeElem.dateTime));
-  });
-}, 10000);
-
-
-function createTextNote(evt: EventWithNip19, relay: string) {
+const createTextNote = (evt: EventWithNip19, relay: string) => {
   const {host, img, name, time, userName} = getMetadata(evt, relay);
   const replies = replyList.filter(({replyTo}) => replyTo === evt.id);
   // const isLongContent = evt.content.trimRight().length > 280;
@@ -205,9 +81,126 @@ function createTextNote(evt: EventWithNip19, relay: string) {
     body,
     ...(replies[0] ? [elem('div', {className: 'mobx-replies'}, replyFeed.reverse())] : []),
   ], {data: {id: evt.id, pubkey: evt.pubkey, relay}});
-}
+};
 
-function handleRecommendServer(evt: Event, relay: string) {
+const renderNote = (
+  evt: EventWithNip19,
+  i: number,
+  sortedFeeds: EventWithNip19[],
+) => {
+  if (getViewElem(evt.id)) { // note already in view
+    return;
+  }
+  const article = createTextNote(evt, eventRelayMap[evt.id][0]);
+  if (i === 0) {
+    getViewContent().append(article);
+  } else {
+    getViewElem(sortedFeeds[i - 1].id).before(article);
+  }
+  setViewElem(evt.id, article);
+};
+
+const hasEnoughPOW = (
+  [tag, , commitment]: string[],
+  eventId: string
+) => {
+  return tag === 'nonce' && Number(commitment) >= config.filterDifficulty && zeroLeadingBitsCount(eventId) >= config.filterDifficulty;
+};
+
+const renderFeed = bounce(() => {
+  const now = Math.floor(Date.now() * 0.001);
+  textNoteList
+    // dont render notes from the future
+    .filter(note => note.created_at <= now)
+    // if difficulty filter is configured dont render notes with too little pow
+    .filter(note => !config.filterDifficulty || note.tags.some(tag => hasEnoughPOW(tag, note.id)))
+    .sort(sortByCreatedAt)
+    .reverse()
+    .forEach(renderNote);
+}, 17); // (16.666 rounded, an arbitrary value to limit updates to max 60x per s)
+
+const renderReply = (evt: EventWithNip19AndReplyTo, relay: string) => {
+  const parent = getViewElem(evt.replyTo);
+  if (!parent) { // root article has not been rendered
+    return;
+  }
+  let replyContainer = parent.querySelector('.mobx-replies');
+  if (!replyContainer) {
+    replyContainer = elem('div', {className: 'mobx-replies'});
+    parent.append(replyContainer);
+  }
+  const reply = createTextNote(evt, relay);
+  replyContainer.append(reply);
+  setViewElem(evt.id, reply);
+};
+
+const handleReply = (evt: EventWithNip19, relay: string) => {
+  if (
+    getViewElem(evt.id) // already rendered probably received from another relay
+    || evt.tags.some(isMention) // ignore mentions for now
+  ) {
+    return;
+  }
+  const replyTo = getReplyTo(evt);
+  if (!replyTo) {
+    console.warn('expected to find reply-to-event-id', evt);
+    return;
+  }
+  const evtWithReplyTo = {replyTo, ...evt};
+  replyList.push(evtWithReplyTo);
+  renderReply(evtWithReplyTo, relay);
+};
+
+const handleTextNote = (evt: Event, relay: string) => {
+  if (eventRelayMap[evt.id]) {
+    eventRelayMap[evt.id] = [...(eventRelayMap[evt.id]), relay]; // TODO: just push?
+  } else {
+    eventRelayMap[evt.id] = [relay];
+    const evtWithNip19 = {
+      nip19: {
+        note: nip19.noteEncode(evt.id),
+        npub: nip19.npubEncode(evt.pubkey),
+      },
+      ...evt,
+    };
+    if (evt.tags.some(hasEventTag)) {
+      handleReply(evtWithNip19, relay);
+    } else {
+      textNoteList.push(evtWithNip19);
+    }
+  }
+  if (!getViewElem(evt.id)) {
+    renderFeed();
+  }
+};
+
+config.rerenderFeed = () => {
+  clearView();
+  renderFeed();
+};
+
+setInterval(() => {
+  document.querySelectorAll('time[datetime]').forEach((timeElem: HTMLTimeElement) => {
+    timeElem.textContent = formatTime(new Date(timeElem.dateTime));
+  });
+}, 10000);
+
+const renderRecommendServer = (evt: Event, relay: string) => {
+  const {img, name, time, userName} = getMetadata(evt, relay);
+  const body = elem('div', {className: 'mbox-body', title: dateTime.format(time)}, [
+    elem('header', {className: 'mbox-header'}, [
+      elem('small', {}, [
+        elem('strong', {}, userName)
+      ]),
+    ]),
+    ` recommends server: ${evt.content}`,
+  ]);
+  return elemArticle([
+    elem('div', {className: 'mbox-img'}, [img]), body
+  ], {className: 'mbox-recommend-server', data: {id: evt.id, pubkey: evt.pubkey}});
+};
+
+const handleRecommendServer = (evt: Event, relay: string) => {
   if (getViewElem(evt.id) || !isWssUrl(evt.content)) {
     return;
   }
@@ -222,25 +215,31 @@ function handleRecommendServer(evt: Event, relay: string) {
     getViewElem(closestTextNotes[0].id)?.after(art); // TODO: note might not be in the dom yet, recommendedServers could be controlled by renderFeed
   }
   setViewElem(evt.id, art);
-}
+};
 
-function renderRecommendServer(evt: Event, relay: string) {
-  const {img, name, time, userName} = getMetadata(evt, relay);
-  const body = elem('div', {className: 'mbox-body', title: dateTime.format(time)}, [
-    elem('header', {className: 'mbox-header'}, [
-      elem('small', {}, [
-        elem('strong', {}, userName)
-      ]),
-    ]),
-    ` recommends server: ${evt.content}`,
-  ]);
-  return elemArticle([
-    elem('div', {className: 'mbox-img'}, [img]), body
-  ], {className: 'mbox-recommend-server', data: {id: evt.id, pubkey: evt.pubkey}});
-}
+const onEvent = (evt: Event, relay: string) => {
+  switch (evt.kind) {
+    case 0:
+      handleMetadata(evt, relay);
+      break;
+    case 1:
+      handleTextNote(evt, relay);
+      break;
+    case 2:
+      handleRecommendServer(evt, relay);
+      break;
+    case 3:
+      // handleContactList(evt, relay);
+      break;
+    case 7:
+      handleReaction(evt, relay);
+    default:
+      // console.log(`TODO: add support for event kind ${evt.kind}`/*, evt*/)
+  }
+};
 
 // subscribe and change view
-function route(path: string) {
+const route = (path: string) => {
   if (path === '/') {
     sub24hFeed(onEvent);
     view('/');
@@ -263,7 +262,7 @@ function route(path: string) {
         console.warn(`type ${type} not yet supported`);
     }
   }
-}
+};
 
 // onload
 route(location.pathname);

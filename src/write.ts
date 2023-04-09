@@ -34,6 +34,19 @@ export const togglePublishView = () => {
   }
 };
 
+const appendReplyForm = (el: HTMLElement) => {
+  writeForm.before(elemShrink(writeInput));
+  writeInput.blur();
+  writeInput.style.removeProperty('height');
+  el.after(writeForm);
+  if (writeInput.value && !writeInput.value.trimRight()) {
+    writeInput.value = '';
+  } else {
+    requestAnimationFrame(() => updateElemHeight(writeInput));
+  }
+  requestAnimationFrame(() => writeInput.focus());
+};
+
 const closeWriteInput = () => writeInput.blur();
 
 export const openWriteInput = (
@@ -139,16 +152,3 @@ writeInput.addEventListener('input', () => {
 });
 
 writeInput.addEventListener('blur', () => sendStatus.textContent = '');
-
-function appendReplyForm(el: HTMLElement) {
-  writeForm.before(elemShrink(writeInput));
-  writeInput.blur();
-  writeInput.style.removeProperty('height');
-  el.after(writeForm);
-  if (writeInput.value && !writeInput.value.trimRight()) {
-    writeInput.value = '';
-  } else {
-    requestAnimationFrame(() => updateElemHeight(writeInput));
-  }
-  requestAnimationFrame(() => writeInput.focus());
-}
