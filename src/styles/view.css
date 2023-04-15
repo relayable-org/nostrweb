@@ -20,18 +20,18 @@ main {
 }
 
 aside {
-  z-index: 2;
+  z-index: 4;
 }
 
 nav {
-  background-color: indigo;
+  background-color: var(--bgcolor-nav);
   display: flex;
   flex-direction: row;
   flex-grow: 1;
   flex-shrink: 0;
-  justify-content: space-around;
+  justify-content: space-between;
   overflow-y: auto;
-  padding: 1rem 1.5rem;
+  padding: 0 1.5rem;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -44,6 +44,19 @@ nav {
   nav {
     flex-direction: column;
     justify-content: space-between;
+  }
+}
+nav a,
+nav button {
+  --bgcolor-accent: transparent;
+  --border-color: transparent;
+  border-radius: 0;
+  padding: 1rem;
+}
+@media (orientation: landscape) {
+  nav a,
+  nav button {
+    padding: 2rem 0;
   }
 }
 
@@ -61,20 +74,25 @@ nav {
   transition: transform .3s cubic-bezier(.465,.183,.153,.946);
   width: 100%;
   will-change: transform;
+  z-index: 2;
 }
 @media (orientation: landscape) {
   .view {
     transition: opacity .3s cubic-bezier(.465,.183,.153,.946);
   }
 }
+.view.view-next {
+  z-index: 3;
+}
+.view.view-prev {
+  z-index: 1;
+}
 @media (orientation: portrait) {
   .view.view-next {
     transform: translateX(100%);
   }
   .view.view-prev {
-    position: relative;
     transform: translateX(-20%);
-    z-index: 0;
   }
 }
 @media (orientation: landscape) {
@@ -91,7 +109,7 @@ nav {
   flex-grow: 1;
   margin-inline: auto;
   overflow-y: auto;
-  padding: var(--gap-half) 0;
+  padding: var(--gap-half) 0 0 0;
   width: 100%;
 }
 main .content {
@@ -107,4 +125,8 @@ nav a {
   flex-direction: column;
   text-align: center;
   text-decoration: none;
+}
+
+.content > header {
+  padding: 3rem 3rem 3rem calc(var(--profileimg-size) + var(--gap));
 }

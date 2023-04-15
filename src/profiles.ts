@@ -1,6 +1,7 @@
 import {Event} from 'nostr-tools';
 import {elem, elemCanvas} from './utils/dom';
 import {getHost, getNoxyUrl} from './utils/url';
+import {getViewContent, getViewElem} from './view';
 import {validatePow} from './events';
 import {parseContent} from './media';
 
@@ -66,7 +67,8 @@ const setMetadata = (
   const name = user.metadata[relay].name || user.name || '';
   if (name) {
     document.body
-      .querySelectorAll(`[data-pubkey="${evt.pubkey}"] .mbox-username:not(.mbox-kind0-name)`)
+      // TODO: this should not depend on specific DOM structure, move pubkey info on username element
+      .querySelectorAll(`[data-pubkey="${evt.pubkey}"] > .mbox-body > header .mbox-username:not(.mbox-kind0-name)`)
       .forEach((username: HTMLElement) => {
         username.textContent = name;
         username.classList.add('mbox-kind0-name');
@@ -103,9 +105,11 @@ export const handleMetadata = (evt: Event, relay: string) => {
   setMetadata(evt, relay, metadata);
 };
 
+export const getProfile = (pubkey: string) => userList.find(user => user.pubkey === pubkey);
+
 export const getMetadata = (evt: Event, relay: string) => {
   const host = getHost(relay);
-  const user = userList.find(user => user.pubkey === evt.pubkey);
+  const user = getProfile(evt.pubkey);
   const userImg = user?.picture;
   const name = user?.metadata[relay]?.name || user?.name;
   const userName = name || evt.pubkey.slice(0, 8);
@@ -156,3 +160,20 @@ export const getMetadata = (evt: Event, relay: string) => {
 //   ]);
 //   return renderArticle([img, body], {className: 'mbox-updated-contact', data: {id: evt.id, pubkey: evt.pubkey, relay}});
 // }
+
+export const renderProfile = (id: string) => {
+  const content = getViewContent();
+  const header = getViewElem(id);
+  if (!content || !header) {
+    return;
+  }
+  const profile = getProfile(id);
+  if (profile && profile.name) {
+    const h1 = header.querySelector('h1');
+    if (h1) {
+      h1.textContent = profile.name;
+    } else {
+      header.prepend(elem('h1', {}, profile.name));
+    }
+  }
+};

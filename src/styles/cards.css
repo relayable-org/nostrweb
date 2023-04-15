@@ -1,8 +1,5 @@
 /* https://developer.mozilla.org/en-US/docs/Web/CSS/Layout_cookbook/Media_objects */
 .mbox {
-  --profileimg-size: 4rem;
-  --profileimg-size-half: 2rem;
-  --profileimg-size-quarter: 1rem;
   align-items: center;
   display: flex;
   flex-direction: row;
@@ -54,9 +51,6 @@
 }
 
 .mbox-header {
-  flex-basis: calc(100% - var(--profileimg-size) - var(--gap-half));
-  flex-grow: 0;
-  flex-shrink: 1;
   margin-top: 0;
 }
 .mbox-header a {
@@ -121,21 +115,21 @@
   display: block;
   height: 200vh;
   left: var(--profileimg-size-half);
-  margin-left: -.2rem;
+  margin-left: -.1rem;
   position: absolute;
   top: -200vh;
-  width: .4rem;
+  width: .2rem;
 }
 .mobx-replies .mbox .mbox::before {
   background: none;
   border-color: var(--bgcolor-inactive);;
   border-style: solid;
-  border-width: 0 0 .4rem .4rem;
+  border-width: 0 0 .2rem .2rem;
   content: "";
   display: block;
   height: var(--profileimg-size-quarter);
   left: calc(-1 * var(--profileimg-size-quarter));
-  margin-left: -.2rem;
+  margin-left: -.1rem;
   position: absolute;
   top: 0;
   width: .8rem;
@@ -147,10 +141,10 @@
   display: block;
   height: 100vh;
   left: calc(-1 * var(--profileimg-size-quarter));
-  margin-left: -.2rem;
+  margin-left: -.1rem;
   position: absolute;
   top: -100vh;
-  width: .4rem;
+  width: .2rem;
 }
 /* support visualisation of 3 levels of thread nesting, rest render flat without line */
 .mbox .mobx-replies .mobx-replies::before,
