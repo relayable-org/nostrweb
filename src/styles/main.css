@@ -103,7 +103,7 @@ img {
 }
 
 .text {
-  margin: var(--gap);
+  padding: 0 var(--gap);
 }
 
 .danger {
