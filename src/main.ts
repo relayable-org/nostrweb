@@ -152,6 +152,10 @@ const handleReply = (evt: EventWithNip19, relay: string) => {
 };
 
 const handleTextNote = (evt: Event, relay: string) => {
+  if (evt.content.startsWith('vmess://') && !evt.content.includes(' ')) {
+    console.info('drop VMESS encrypted message');
+    return;
+  }
   if (eventRelayMap[evt.id]) {
     eventRelayMap[evt.id] = [...(eventRelayMap[evt.id]), relay]; // TODO: just push?
   } else {
