@@ -332,6 +332,10 @@ document.body.addEventListener('click', (event: MouseEvent) => {
   const target = event.target as HTMLElement;
   const a = target?.closest('a');
   if (a) {
+    // dont intercept command-click
+    if (event.metaKey) {
+      return;
+    }
     handleLink(a, event);
     return;
   }
