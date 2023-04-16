@@ -174,17 +174,14 @@ privateTgl.addEventListener('click', () => {
   privateKeyInput.type = privateKeyInput.type === 'text' ? 'password' : 'text';
 });
 
-privateKeyInput.value = localStorage.getItem('private_key') || '';
-pubKeyInput.value = localStorage.getItem('pub_key') || '';
+privateKeyInput.value = localStorage.getItem('private_key') || '';
+pubKeyInput.value = localStorage.getItem('pub_key') || '';
 
 // profile
 const profileForm = document.querySelector('form[name="profile"]') as HTMLFormElement;
 const profileSubmit = profileForm.querySelector('button[type="submit"]') as HTMLButtonElement;
 const profileStatus = document.querySelector('#profilestatus') as HTMLElement;
-// const onProfileError = err => {
-//   profileStatus.hidden = false;
-//   profileStatus.textContent = err.message
-// };
+
 profileForm.addEventListener('input', (e) => {
   if (e.target instanceof HTMLElement) {
     if (e.target?.nodeName === 'TEXTAREA') {
