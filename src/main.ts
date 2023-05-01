@@ -49,17 +49,17 @@ const renderFeed = bounce(() => {
   switch (view.type) {
     case 'note':
       textNoteList
-        .concat(replyList)
+        .concat(replyList) // search id in notes and replies
         .filter(note => note.id === view.id)
         .forEach(renderNote);
       break;
     case 'profile':
       const isEvent = <T>(evt?: T): evt is T => evt !== undefined;
       [
-        ...textNoteList
+        ...textNoteList // get notes
           .filter(note => note.pubkey === view.id),
-        ...replyList.filter(reply => reply.pubkey === view.id)
-          .map(reply => textNoteList.find(note => note.id === reply.replyTo) || replyList.find(note => note.id === reply.replyTo) )
+        ...replyList.filter(reply => reply.pubkey === view.id) // and replies
+          .map(reply => textNoteList.find(note => note.id === reply.replyTo)) // and the replied to notes
           .filter(isEvent)
       ]
         .sort(sortByCreatedAt)

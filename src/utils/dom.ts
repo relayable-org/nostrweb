@@ -184,8 +184,8 @@ export const updateElemHeight = (
 
 export const elemArticle = (
   content: Array<HTMLElement>,
-  attrs: Attributes<HTMLElementTagNameMap['div']> = {}
+  attrs: Attributes<HTMLElementTagNameMap['div']> = {},
 ) => {
-  const className = attrs.className ? ['mbox', attrs?.className].join(' ') : 'mbox';
+  const className = attrs.className ? `mbox ${attrs.className}` : 'mbox';
   return elem('article', {...attrs, className}, content);
 };
