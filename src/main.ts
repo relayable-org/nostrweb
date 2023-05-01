@@ -89,10 +89,11 @@ const renderReply = (evt: EventWithNip19AndReplyTo) => {
   if (!parent) { // root article has not been rendered
     return;
   }
-  let replyContainer = parent.querySelector('.mobx-replies');
+  let replyContainer = parent.querySelector('.mbox-replies');
   if (!replyContainer) {
-    replyContainer = elem('div', {className: 'mobx-replies'});
+    replyContainer = elem('div', {className: 'mbox-replies'});
     parent.append(replyContainer);
+    parent.classList.add('mbox-has-replies');
   }
   const reply = createTextNote(evt, eventRelayMap[evt.id][0]);
   replyContainer.append(reply);

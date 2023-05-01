@@ -21,7 +21,9 @@ export const createTextNote = (
   relay: string,
 ) => {
   const {host, img, name, time, userName} = getMetadata(evt, relay);
-  const replies = replyList.filter(({replyTo}) => replyTo === evt.id);
+  const replies = replyList.filter(({replyTo}) => replyTo === evt.id)
+    .sort(sortByCreatedAt)
+    .reverse();
   // const isLongContent = evt.content.trimRight().length > 280;
   // const content = isLongContent ? evt.content.slice(0, 280) : evt.content;
   const reactions = getReactions(evt.id);
@@ -44,7 +46,7 @@ export const createTextNote = (
   if (localStorage.getItem('reply_to') === evt.id) {
     openWriteInput(buttons, evt.id);
   }
-  const replyFeed: Array<HTMLElement> = replies[0] ? replies.sort(sortByCreatedAt).map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
+  const replyFeed: Array<HTMLElement> = replies[0] ? replies.map(e => setViewElem(e.id, createTextNote(e, relay))) : [];
   return elemArticle([
     elem('div', {className: 'mbox-img'}, img),
     elem('div', {className: 'mbox-body'}, [
@@ -64,8 +66,8 @@ export const createTextNote = (
       ]),
       buttons,
     ]),
-    ...(replies[0] ? [elem('div', {className: 'mobx-replies'}, replyFeed.reverse())] : []),
-  ], {data: {id: evt.id, pubkey: evt.pubkey, relay}});
+    ...(replies[0] ? [elem('div', {className: 'mbox-replies'}, replyFeed)] : []),
+  ], {className: replies.length ? 'mbox-has-replies' : '', data: {id: evt.id, pubkey: evt.pubkey, relay}});
 };
 
 export const renderRecommendServer = (evt: Event, relay: string) => {

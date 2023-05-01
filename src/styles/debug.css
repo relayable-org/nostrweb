@@ -1,0 +1,24 @@
+
+.mbox-img {
+  opacity: .73;
+}
+.mbox-replies {
+  margin-bottom: 4px !important;
+  outline: 2px dashed rgba(0, 255, 0, 0.15);
+  outline-offset: -2px;
+}
+.mbox-replies .mbox-replies {
+  outline-color: rgba(0, 255, 0, .4);
+  outline-offset: -4px;
+}
+.mbox-replies .mbox-replies .mbox-replies {
+  outline-color: rgba(0, 255, 0, .7);
+  outline-offset: -6px;
+}
+.mbox-replies .mbox-replies .mbox-replies .mbox-replies {
+  outline-color: rgba(210, 255, 0, 1);
+  outline-offset: -8px;
+}
+.mbox-replies .mbox-replies .mbox-replies .mbox-replies .mbox-replies {
+  outline-color: rgb(187, 119, 9);
+}
