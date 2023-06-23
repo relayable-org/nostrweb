@@ -103,9 +103,6 @@ export const publish = (
 };
 
 
-addRelay('wss://relay.snort.social');
-addRelay('wss://nostr.bitcoiner.social');
-addRelay('wss://nostr.mom');
-addRelay('wss://relay.nostr.bg');
-addRelay('wss://nos.lol');
+
+addRelay('wss://ca.relayable.org');
 // addRelay('wss://relay.nostr.ch');
